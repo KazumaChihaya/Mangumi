@@ -1,0 +1,22 @@
+import React from "react";
+export default function Root({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ja">
+      <head>
+        <meta charSet="utf-8" />
+        <meta
+          name="viewport"
+          content="width=device-width,initial-scale=1,viewport-fit=cover"
+        />
+        <meta name="theme-color" content="#170c1e" />
+        <meta
+          name="description"
+          content="マン組の公式ファンアプリ。配信、スペース、DM、ストーリーで最高の瞬間を一緒に。"
+        />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/icon.svg" />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}

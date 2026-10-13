@@ -1,0 +1,1634 @@
+[
+  {
+    "id": "A001",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "管理者ログイン（一般利用者と分離）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A002",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "二要素認証",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A003",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "管理者パスワード再設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A004",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "管理者プロフィール・セッション",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A005",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "権限不足・操作不可（403）",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "A006",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "管理操作の確認・理由入力",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "A007",
+    "area": "admin",
+    "section": "管理者認証・共通",
+    "title": "モバイル管理メニュー・ナビゲーション",
+    "kind": "共通部品",
+    "phase": "P1"
+  },
+  {
+    "id": "A008",
+    "area": "admin",
+    "section": "ダッシュボード",
+    "title": "運営ダッシュボード（PC＋スマホ同一画像）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A009",
+    "area": "admin",
+    "section": "ダッシュボード",
+    "title": "ダッシュボードの集計期間・指標詳細",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "A010",
+    "area": "admin",
+    "section": "ダッシュボード",
+    "title": "売上・会員・通知の分析詳細",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A011",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "会員一覧（PC＋スマホ同一画像）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A012",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "会員詳細・プロフィール",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A013",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "会員プラン変更・適用予約",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A014",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "会員ごとの機能権限上書き",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A015",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "警告・一時停止・永久停止",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "A016",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "ユーザーセッションの失効",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A017",
+    "area": "admin",
+    "section": "会員管理",
+    "title": "退会・データ開示／訂正／削除依頼対応",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A018",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "プラン一覧・加入者数",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A019",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "プラン新規作成・編集",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A020",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "機能権限マトリクス（プラン×機能）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A021",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "利用回数・保存期間などの上限設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A022",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "公開・申込受付・無料体験・料金設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A023",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "プラン変更の適用予約・影響確認",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A024",
+    "area": "admin",
+    "section": "プラン・権限",
+    "title": "個別会員の特例付与・停止履歴",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A025",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "配信予定一覧・簡易編集（PC＋スマホ同一画像）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A026",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "管理カレンダー（月・週・一覧）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A027",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "配信予定の新規登録・詳細編集",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A028",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "繰り返し配信の設定・個別回上書き",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A029",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "公開・予約公開・非公開・中止・延期",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A030",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "変更通知の送信判断・既送信通知の確認",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "A031",
+    "area": "admin",
+    "section": "配信予定管理",
+    "title": "配信一覧の絞り込み・CSV出力",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "A032",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "通知キャンペーン一覧",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A033",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "お知らせ・Pushの新規作成／編集",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A034",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "テンプレート管理",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A035",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "配信対象のセグメント設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A036",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "テスト送信・確認",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "A037",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "即時送信・予約送信設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A038",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "送信結果・失敗理由・開封／クリック",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A039",
+    "area": "admin",
+    "section": "通知管理",
+    "title": "登録端末・通知購読状況",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A040",
+    "area": "admin",
+    "section": "ストーリー管理",
+    "title": "ストーリー一覧・ステータス",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A041",
+    "area": "admin",
+    "section": "ストーリー管理",
+    "title": "新規投稿・画像／動画アップロード",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A042",
+    "area": "admin",
+    "section": "ストーリー管理",
+    "title": "対象プラン・通知・予約公開設定",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A043",
+    "area": "admin",
+    "section": "ストーリー管理",
+    "title": "ストーリーアーカイブ・ハイライト管理",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A044",
+    "area": "admin",
+    "section": "ストーリー管理",
+    "title": "閲覧数・既読の匿名集計",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A045",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "ルーム一覧・予定一覧",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A046",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "ルーム作成・予約・公開範囲・上限",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A047",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "開催中のルーム監視・参加状況",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A048",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "登壇者管理・ミュート・強制終了",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A049",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "ルームBAN・通報対応",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A050",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "録音・アーカイブ管理",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A051",
+    "area": "admin",
+    "section": "音声ルーム管理",
+    "title": "音声品質・接続障害状況",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "A052",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "通報キュー・対応ペイン（PC＋スマホ同一画像）",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A053",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "通報詳細・証拠スナップショット",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A054",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "限定権限によるDM調査",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A055",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "モデレーション措置の確認・履歴",
+    "kind": "モーダル",
+    "phase": "P2"
+  },
+  {
+    "id": "A056",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "NGワード・URL・連投制限の設定",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A057",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "ブロック・停止アカウント一覧",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A058",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "問い合わせ・サポート案件",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A059",
+    "area": "admin",
+    "section": "DM・通報・モデレーション",
+    "title": "通報期限・担当者割当",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "A060",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "売上ダッシュボード",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A061",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "投げ銭決済一覧・詳細",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A062",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "返金操作・理由・再確認",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A063",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "チャージバック管理",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A064",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "投げ銭候補金額・上限設定",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A065",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "売上／手数料／期間別集計・CSV",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A066",
+    "area": "admin",
+    "section": "投げ銭・売上管理",
+    "title": "受取対象・決済事業者状態",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "A067",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "キャンペーン一覧",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A068",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "キャンペーン作成・期間・プラン条件",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A069",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "景品登録・画像・在庫・重複設定",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A070",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "提供割合（100%検証）・バージョン管理",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A071",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "抽選履歴・使用確率バージョン照会",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A072",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "無料チケットの配布・履歴",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A073",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "補填付与・監査履歴",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "A074",
+    "area": "admin",
+    "section": "ガチャ管理",
+    "title": "キャンペーン公開前確認・停止",
+    "kind": "モーダル",
+    "phase": "P5"
+  },
+  {
+    "id": "A075",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "ブランド設定一覧・公開プレビュー",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A076",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "ロゴ・PWAアイコン・ファビコン",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A077",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "色・主要ボタン・背景テーマ設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A078",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "OGP・通知／メール画像",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A079",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "端末別PWAインストール案内文・画像",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A080",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "素材の公開予約・変更履歴・差し戻し",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A081",
+    "area": "admin",
+    "section": "ブランド・PWA素材",
+    "title": "利用規約・プライバシー・特商法リンク管理",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A082",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "メール配信・テンプレート設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A083",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "Web Push配信設定・端末状態",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A084",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "外部サービス接続状態（決済・音声等）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A085",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "保存期間・ファイル管理設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A086",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "メンテナンス表示・お知らせ文",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A087",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "ジョブ実行・失敗通知・再試行",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A088",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "セッション・管理者IP制限等の安全設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A089",
+    "area": "admin",
+    "section": "システム設定・運用",
+    "title": "システムヘルス・監視・エラー概要",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A090",
+    "area": "admin",
+    "section": "管理者・監査ログ",
+    "title": "管理者アカウント一覧",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A091",
+    "area": "admin",
+    "section": "管理者・監査ログ",
+    "title": "管理者招待・追加・無効化",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A092",
+    "area": "admin",
+    "section": "管理者・監査ログ",
+    "title": "ロール・画面操作権限の割当",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A093",
+    "area": "admin",
+    "section": "管理者・監査ログ",
+    "title": "二要素認証の登録状況管理",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A094",
+    "area": "admin",
+    "section": "管理者・監査ログ",
+    "title": "監査ログ一覧・変更前後の比較",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "A095",
+    "area": "admin",
+    "section": "管理者・監査ログ",
+    "title": "監査ログ詳細・CSV出力",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U001",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "PWAインストール案内（iPhone・Androidを1画像に掲載）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U002",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "サービス紹介・ウェルカム",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U003",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "利用規約",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U004",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "プライバシーポリシー",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U005",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "PWAインストール案内（Windows・macOS）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U006",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "PWAインストール案内（非対応ブラウザ）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U007",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "PWAインストール未完了時の再案内",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U008",
+    "area": "member",
+    "section": "導入・規約・PWA",
+    "title": "端末別インストール手順の拡大表示",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "U009",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "新規会員登録",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U010",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "確認メール送信済み",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U011",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "メール確認完了・登録完了",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U012",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "ログイン",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U013",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "パスワード再設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U014",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "メール未確認会員の機能制限・再送",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U015",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "メールアドレス変更・再確認",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U016",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "初回プロフィール確認",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U017",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "初回通知許可の説明と選択",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U018",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "通知許可を拒否した場合の再設定案内",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U019",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "入力エラー表示（登録／ログイン）",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U020",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "認証期限切れ・確認リンク無効",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U021",
+    "area": "member",
+    "section": "認証・オンボーディング",
+    "title": "利用停止時の案内",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U022",
+    "area": "member",
+    "section": "ホーム・お知らせ",
+    "title": "ホーム",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U023",
+    "area": "member",
+    "section": "ホーム・お知らせ",
+    "title": "お知らせ一覧",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U024",
+    "area": "member",
+    "section": "ホーム・お知らせ",
+    "title": "お知らせ詳細",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U025",
+    "area": "member",
+    "section": "ホーム・お知らせ",
+    "title": "通知センター・未読一覧",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U026",
+    "area": "member",
+    "section": "ホーム・お知らせ",
+    "title": "通知詳細・遷移先",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U027",
+    "area": "member",
+    "section": "ホーム・お知らせ",
+    "title": "初期公開（Freeのみ）ホーム表示",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U028",
+    "area": "member",
+    "section": "配信予定",
+    "title": "配信カレンダー（月表示）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U029",
+    "area": "member",
+    "section": "配信予定",
+    "title": "配信予定詳細",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U030",
+    "area": "member",
+    "section": "配信予定",
+    "title": "配信カレンダー（週表示）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U031",
+    "area": "member",
+    "section": "配信予定",
+    "title": "配信予定（一覧表示）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U032",
+    "area": "member",
+    "section": "配信予定",
+    "title": "配信ごとのリマインダー時刻設定",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "U033",
+    "area": "member",
+    "section": "配信予定",
+    "title": "配信中止・延期・URL変更の状態表示",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U034",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "ストーリー一覧",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U035",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "ストーリー閲覧（縦型・全画面）",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U036",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "ストーリーアーカイブ一覧",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U037",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "ハイライト一覧・詳細",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U038",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "会員プランでロックされたストーリー",
+    "kind": "UI状態",
+    "phase": "P2"
+  },
+  {
+    "id": "U039",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "動画ストーリー再生・一時停止",
+    "kind": "UI状態",
+    "phase": "P2"
+  },
+  {
+    "id": "U040",
+    "area": "member",
+    "section": "ストーリー",
+    "title": "ストーリー閲覧終了・次の投稿へ",
+    "kind": "UI状態",
+    "phase": "P2"
+  },
+  {
+    "id": "U041",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "スペース一覧（開催中・今後の予定）",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U042",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "音声ルーム参加中",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U043",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "音声ルーム予定一覧・履歴タブ",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U044",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "音声ルーム詳細（入室前）",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U045",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "音声ルーム入室確認・権限説明",
+    "kind": "モーダル",
+    "phase": "P3"
+  },
+  {
+    "id": "U046",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "マイク権限要求・拒否時案内",
+    "kind": "UI状態",
+    "phase": "P3"
+  },
+  {
+    "id": "U047",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "発言申請中・登壇許可通知",
+    "kind": "UI状態",
+    "phase": "P3"
+  },
+  {
+    "id": "U048",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "スピーカー・共同ホスト操作",
+    "kind": "UI状態",
+    "phase": "P3"
+  },
+  {
+    "id": "U049",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "ホスト用の登壇・ミュート管理",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U050",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "ルーム作成・予約（権限保有者）",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U051",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "満員・参加待機",
+    "kind": "UI状態",
+    "phase": "P3"
+  },
+  {
+    "id": "U052",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "通信切断・再接続",
+    "kind": "UI状態",
+    "phase": "P3"
+  },
+  {
+    "id": "U053",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "ルーム終了画面",
+    "kind": "画面",
+    "phase": "P3"
+  },
+  {
+    "id": "U054",
+    "area": "member",
+    "section": "スペース・音声ルーム",
+    "title": "録音の告知・同意（有効時）",
+    "kind": "モーダル",
+    "phase": "P3"
+  },
+  {
+    "id": "U055",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "DM会話一覧",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U056",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "1対1 DM会話",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U057",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "ユーザー通報・ブロック",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U058",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "DM相手の選択・会話開始",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U059",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "音声メッセージ録音・プレビュー",
+    "kind": "モーダル",
+    "phase": "P2"
+  },
+  {
+    "id": "U060",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "送信失敗・再送",
+    "kind": "UI状態",
+    "phase": "P2"
+  },
+  {
+    "id": "U061",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "メッセージメニュー・送信取消",
+    "kind": "モーダル",
+    "phase": "P2"
+  },
+  {
+    "id": "U062",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "会話設定・ミュート",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U063",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "ブロック・通報の確認／送信完了",
+    "kind": "UI状態",
+    "phase": "P2"
+  },
+  {
+    "id": "U064",
+    "area": "member",
+    "section": "DM・安全機能",
+    "title": "DM未作成・空一覧",
+    "kind": "UI状態",
+    "phase": "P2"
+  },
+  {
+    "id": "U065",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "投げ銭（金額・応援メッセージ・決済）",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U066",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "支払方法・投げ銭履歴（一体型モック）",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U067",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "投げ銭の受取対象選択",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U068",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "決済内容の最終確認",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U069",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "カード登録・編集",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U070",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "カード認証・本人認証画面",
+    "kind": "UI状態",
+    "phase": "P4"
+  },
+  {
+    "id": "U071",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "決済処理中・結果待ち",
+    "kind": "UI状態",
+    "phase": "P4"
+  },
+  {
+    "id": "U072",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "投げ銭完了",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U073",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "投げ銭失敗・キャンセル・保留",
+    "kind": "UI状態",
+    "phase": "P4"
+  },
+  {
+    "id": "U074",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "投げ銭履歴詳細・返金状態",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U075",
+    "area": "member",
+    "section": "投げ銭・支払い",
+    "title": "利用上限到達・追加認証案内",
+    "kind": "UI状態",
+    "phase": "P4"
+  },
+  {
+    "id": "U076",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "ガチャ抽選・スロット風メイン画面",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U077",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "ガチャキャンペーン一覧",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U078",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "ガチャキャンペーン詳細",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U079",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "景品一覧・提供割合",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U080",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "抽選前のチケット使用確認",
+    "kind": "モーダル",
+    "phase": "P5"
+  },
+  {
+    "id": "U081",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "抽選演出（リール・リーチ・昇格）",
+    "kind": "UI状態",
+    "phase": "P5"
+  },
+  {
+    "id": "U082",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "抽選結果（単発）",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U083",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "抽選結果（複数回）",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U084",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "コレクション一覧",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U085",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "獲得アイテム詳細",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U086",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "抽選履歴・使用チケット履歴",
+    "kind": "画面",
+    "phase": "P5"
+  },
+  {
+    "id": "U087",
+    "area": "member",
+    "section": "ガチャ・コレクション",
+    "title": "無料チケット不足・対象外",
+    "kind": "UI状態",
+    "phase": "P5"
+  },
+  {
+    "id": "U088",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "マイページ",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U089",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "プラン比較・プラン詳細",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U090",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "通知設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U091",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "プロフィール編集",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U092",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "プロフィール写真のアップロード・切り抜き",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "U093",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "公開範囲・性別表示設定",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U094",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "プラン申込・変更確認",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U095",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "有料プラン解約・満了",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U096",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "プラン利用上限・特典詳細",
+    "kind": "画面",
+    "phase": "P4"
+  },
+  {
+    "id": "U097",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "ブロック一覧・解除",
+    "kind": "画面",
+    "phase": "P2"
+  },
+  {
+    "id": "U098",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "ログイン中の端末・セッション一覧",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U099",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "端末単位／全端末ログアウト確認",
+    "kind": "モーダル",
+    "phase": "P1"
+  },
+  {
+    "id": "U100",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "利用履歴（総合）",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U101",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "問い合わせ・ヘルプ",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U102",
+    "area": "member",
+    "section": "マイページ・アカウント",
+    "title": "退会確認・退会完了",
+    "kind": "画面",
+    "phase": "P1"
+  },
+  {
+    "id": "U103",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "オフライン専用画面",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U104",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "アプリ更新・再読み込み案内",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U105",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "メンテナンス中",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U106",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "プラン・権限によるアクセス制限",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U107",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "通信エラー・再試行",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U108",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "データなし・読み込み中",
+    "kind": "UI状態",
+    "phase": "P1"
+  },
+  {
+    "id": "U109",
+    "area": "member",
+    "section": "共通表示・例外状態",
+    "title": "音声ルーム継続再生ミニプレイヤー",
+    "kind": "共通部品",
+    "phase": "P3"
+  }
+]

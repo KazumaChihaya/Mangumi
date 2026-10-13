@@ -5,12 +5,64 @@ YouTuberグループ「マン組」のファン向け公式アプリと運営管
 
 ## 開発状況
 
-現在は仕様整理とリポジトリの初期準備段階です。アプリケーションの実装、開発環境、起動コマンドはまだありません。
+Expo SDK 57・Expo Routerで、サイトマップの**利用者109項目・管理95項目、合計204項目**を実装したWeb／PWAのUIプレビューです。画面、例外状態、確認モーダル、共通部品を含みます。
+
+UI案は画面構成の根拠、別途提供された「雰囲気イメージ」は全ページのビジュアルの基準として使用しています。ゴールドの金属フレーム、赤いランプ、ネオン、リール、音を利用者・管理の全画面に適用しています。
+
+管理画面の予定・通知・ストーリー編集は同じブラウザセッションの利用者画面へ反映されます。DM、通報、問い合わせ、チケット抽選、コレクション、CSV、監査履歴もプレビュー内で操作できます。
+
+**本番API、DB、メール、Web Push配信、LiveKit、Stripe、ストア課金は未接続です。** 認証は画面フローのプレビューで、実際のアカウント作成・決済・外部メッセージ配信は行いません。サンプルデータを使う本番公開前のUI実装です。
 
 - プロダクト名：まんぞうラブ
 - リポジトリ名：Mangumi
 - 仕様書：Draft 0.1（2026年10月2日作成）
 - 詳細仕様：[プロダクト仕様書](docs/product-specification.md)
+- 実装と本番接続の境界：[UI実装メモ](docs/ui-implementation.md)
+
+## 起動と画面確認
+
+Node.js 24、pnpm 11で開発しています。
+
+```powershell
+pnpm install
+pnpm dev
+```
+
+開発サーバーは `http://localhost:8081` です。静的ビルドを確認する場合：
+
+```powershell
+pnpm build
+pnpm preview
+```
+
+プレビューは `http://localhost:4173` です。
+
+| URL                                                       | 内容                                            |
+| --------------------------------------------------------- | ----------------------------------------------- |
+| `/`                                                       | 利用者ホーム                                    |
+| `/calendar`・`/stories`・`/space`・`/dm`・`/gacha`・`/me` | 各機能の入口                                    |
+| `/admin`                                                  | 管理ダッシュボード                              |
+| `/screens`                                                | 全204項目の検索・一覧、プレビューデータの初期化 |
+| `/u/U001`〜`/u/U109`                                      | 利用者の個別画面・状態                          |
+| `/admin/A001`〜`/admin/A095`                              | 管理の個別画面・状態                            |
+
+効果音は初期OFFで、操作によりONにできます。ランプ、光沢、画面の登場、波形、リール、紙吹雪を実装し、「演出ひかえめ」とOSの動きを減らす設定を尊重します。
+
+サンプルデータは `sessionStorage`、音と演出の好みは `localStorage` に保存します。パスワード、カード番号、CVCは保存しません。録音音声は端末のメモリ内でプレビューします。
+
+現在の描画はWebのDOM／CSSです。共有TypeScriptモデルと操作ロジックへ、将来のiOS・Android版の描画、通知、ストア課金アダプターを追加する計画です。
+
+## 検証
+
+```powershell
+pnpm typecheck
+pnpm test
+pnpm --filter @mangumi/member exec playwright install chromium
+pnpm build
+pnpm test:e2e
+```
+
+全204項目のPC幅・320px幅での描画、横はみ出し、ブラウザエラーを確認し、編集内容の反映、DMのブロック、ガチャの二重操作、確率バージョンの保持も検証します。
 
 以下は開発予定の内容です。具体的な機能仕様、設定値、受入条件はプロダクト仕様書を参照してください。
 
@@ -26,14 +78,14 @@ YouTuberグループ「マン組」のファン向け公式アプリと運営管
 
 ## リリース計画
 
-| 段階 | 目的 | 主な機能 |
-| --- | --- | --- |
+| 段階    | 目的                    | 主な機能                                                                                                            |
+| ------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Phase 1 | PWAとして安全に公開する | 会員登録、メール確認、ログイン、プロフィール、PWA案内、配信カレンダー、Web Push、管理画面、Freeプラン、ブランド設定 |
-| Phase 2 | 日常的に開く理由を作る | ストーリー、既読管理、1対1 DM、音声メッセージ、通報、ブロック |
-| Phase 3 | ファン交流を作る | 音声ルーム、ルーム予定、司会権限、モデレーション |
-| Phase 4 | 収益化する | 有料プラン、投げ銭、カード登録、返金、売上管理 |
-| Phase 5 | 継続率を高める | ガチャ、コレクション、チケット、キャンペーン、確率履歴 |
-| Phase 6 | ストアへ展開する | iOS、Android、ストア課金、APNs／FCM、審査対応 |
+| Phase 2 | 日常的に開く理由を作る  | ストーリー、既読管理、1対1 DM、音声メッセージ、通報、ブロック                                                       |
+| Phase 3 | ファン交流を作る        | 音声ルーム、ルーム予定、司会権限、モデレーション                                                                    |
+| Phase 4 | 収益化する              | 有料プラン、投げ銭、カード登録、返金、売上管理                                                                      |
+| Phase 5 | 継続率を高める          | ガチャ、コレクション、チケット、キャンペーン、確率履歴                                                              |
+| Phase 6 | ストアへ展開する        | iOS、Android、ストア課金、APNs／FCM、審査対応                                                                       |
 
 課金プランと機能権限のデータ構造はPhase 1から用意します。有料決済の画面は初期公開時には機能フラグで非表示にします。
 
@@ -64,19 +116,19 @@ YouTuberグループ「マン組」のファン向け公式アプリと運営管
 
 ## 技術構成（仕様書の採用案）
 
-| 領域 | 構成 |
-| --- | --- |
-| 利用者アプリ | Expo、React Native、React Native Web、Expo Router、TypeScript |
-| 管理画面 | 同じPWA内の管理者専用ルート、React Native Web、TypeScript |
-| PWA | Web App Manifest、Service Worker、標準Web Push API、VAPID |
-| API | Fastify、TypeScript、REST API、OpenAPI |
-| データベース | 本番はMariaDB、開発はSQLite |
-| 通知ジョブ | DBのジョブテーブルをAPIプロセス内で定期ポーリング。Redisは使用しない |
-| ファイル | 開発はローカルファイル、本番はVPSの永続ボリュームと別のバックアップ先 |
-| 音声ルーム | LiveKitなどのWebRTC SFU。通常のAPI／DBホストから分離 |
-| 決済 | Web版はStripeを候補とし、将来のネイティブ版はStoreKit／Google Play Billingへ対応 |
-| メール | トランザクションメールサービス |
-| 本番環境 | さくらVPS、Caddy、コンテナ構成 |
+| 領域         | 構成                                                                             |
+| ------------ | -------------------------------------------------------------------------------- |
+| 利用者アプリ | Expo、React Native、React Native Web、Expo Router、TypeScript                    |
+| 管理画面     | 同じPWA内の管理者専用ルート、React Native Web、TypeScript                        |
+| PWA          | Web App Manifest、Service Worker、標準Web Push API、VAPID                        |
+| API          | Fastify、TypeScript、REST API、OpenAPI                                           |
+| データベース | 本番はMariaDB、開発はSQLite                                                      |
+| 通知ジョブ   | DBのジョブテーブルをAPIプロセス内で定期ポーリング。Redisは使用しない             |
+| ファイル     | 開発はローカルファイル、本番はVPSの永続ボリュームと別のバックアップ先            |
+| 音声ルーム   | LiveKitなどのWebRTC SFU。通常のAPI／DBホストから分離                             |
+| 決済         | Web版はStripeを候補とし、将来のネイティブ版はStoreKit／Google Play Billingへ対応 |
+| メール       | トランザクションメールサービス                                                   |
+| 本番環境     | さくらVPS、Caddy、コンテナ構成                                                   |
 
 音声基盤、決済、メールなどの外部サービスと本番のサーバーサイズは、実装・検証時に確定します。
 
@@ -87,8 +139,22 @@ YouTuberグループ「マン組」のファン向け公式アプリと運営管
 ```text
 Mangumi/
   README.md
+  apps/member/
+    app/                    # Expo Routerのルート
+    src/member/             # 利用者画面
+    src/admin/              # 管理画面
+    src/model.ts            # 共有データモデルと検証
+    src/store.tsx           # プレビュー状態と監査履歴
+    src/screens.json        # サイトマップの全204項目
+    src/global.css          # 共通レイアウト
+    src/cabinet.css         # 雰囲気画像を基準にした全画面の装飾
+    public/                 # 提供画像・筐体フレーム・PWA
+    tests/                  # データ検証とブラウザテスト
+  scripts/serve.mjs          # 静的出力のプレビューサーバー
   docs/
     product-specification.md
+    ui-implementation.md
+    ui-reference/
 ```
 
 実装時のモノレポ構成案：

@@ -1,0 +1,17 @@
+{
+  "name": "mangumi",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "pnpm --filter @mangumi/member dev",
+    "build": "pnpm --filter @mangumi/member build",
+    "typecheck": "pnpm --filter @mangumi/member typecheck",
+    "test": "pnpm --filter @mangumi/member test",
+    "test:e2e": "pnpm --filter @mangumi/member test:e2e",
+    "preview": "node scripts/serve.mjs"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  }
+}
