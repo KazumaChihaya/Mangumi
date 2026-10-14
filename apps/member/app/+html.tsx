@@ -20,7 +20,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
       <body
         style={
           {
-            "--chrome-frame": `url("${publicPath("/assets/chrome-frame.svg")}")`,
+            "--chrome-frame": `url("${publicPath("/assets/cabinet-bezel-v2.png")}")`,
+            "--cabinet-art": `url("${publicPath("/assets/mood-cabinet.png")}")`,
+            "--gacha-art": `url("${publicPath("/assets/hero_gacha.jpg")}")`,
             "--admin-backdrop": `url("${publicPath("/assets/mood-admin.png")}")`,
           } as React.CSSProperties
         }

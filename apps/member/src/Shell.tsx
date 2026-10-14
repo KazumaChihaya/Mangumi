@@ -58,6 +58,11 @@ export function Shell({
       className={`app-background ${admin ? "admin-background" : ""}`}
       style={{ "--accent": state.settings.accent } as React.CSSProperties}
     >
+      <div className="cabinet-lights" aria-hidden="true">
+        {Array.from({ length: 12 }, (_, index) => (
+          <i key={index} style={{ "--lamp": index } as React.CSSProperties} />
+        ))}
+      </div>
       <a className="skip-link" href="#main-content">
         本文へ移動
       </a>
@@ -227,6 +232,10 @@ export function Shell({
                 MANZOU LOVE
                 <span />
               </div>
+              <div className="cabinet-controls">
+                <span>NO SLOT NO LIFE</span>
+                <SoundControls />
+              </div>
             </header>
             <main
               id="main-content"
@@ -240,7 +249,7 @@ export function Shell({
                     aria-label="前の画面へ"
                     onClick={() => {
                       if (window.history.length > 1) window.history.back();
-                      else window.location.assign("/");
+                      else window.location.assign(publicPath("/"));
                     }}
                   >
                     <Icon name="back" size={18} />
@@ -268,7 +277,6 @@ export function Shell({
                   </div>
                 </details>
               )}
-              <SoundControls />
               <footer className="member-footer">
                 <RouteLink id="U003">利用規約</RouteLink>
                 <RouteLink id="U004">プライバシー</RouteLink>

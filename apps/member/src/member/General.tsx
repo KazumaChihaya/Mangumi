@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { HomeShowcase } from "./HomeShowcase";
 import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
@@ -91,128 +92,7 @@ export function HomePage({ screen }: { screen: Screen }) {
         </Panel>
       </>
     );
-  const first = state.schedules.find((s) => s.status === "公開");
-  return (
-    <div className="screen-body content-stagger">
-      <div className="space-between">
-        <span className="eyebrow">WELCOME BACK, {state.profile.name}</span>
-        <RouteLink id="U001" className="back-link">
-          <Icon name="download" size={14} />
-          アプリを追加
-        </RouteLink>
-      </div>
-      <Hero
-        asset="hero_home"
-        label="マン組 OFFICIAL FAN APP"
-        title="打つ、叫ぶ、分かち合う。"
-        text="最高の瞬間も、何気ない毎日も。マン組と一緒に、もっと熱く。"
-        action={
-          <Button id="U029" tone="gold" icon="play">
-            次回の配信をチェック
-          </Button>
-        }
-      />
-      <div className="section-title">
-        <h2>マン組の日常</h2>
-        <RouteLink id="U034">すべて見る ↗</RouteLink>
-      </div>
-      <div className="story-strip">
-        {state.stories
-          .filter((s) => s.status === "公開")
-          .map((story) => (
-            <RouteLink
-              key={story.id}
-              id="U035"
-              item={story.id}
-              className={`story-avatar ${story.viewed ? "viewed" : ""}`}
-            >
-              <img src={publicPath(story.image)} alt={story.title} />
-              <span>{story.title.slice(0, 8)}</span>
-            </RouteLink>
-          ))}
-        <RouteLink id="U037" className="story-avatar">
-          <img src={publicPath("/assets/avatar.jpg")} alt="ハイライト" />
-          <span>ハイライト</span>
-        </RouteLink>
-      </div>
-      {first && (
-        <Panel
-          title="次回の配信"
-          action={<RouteLink id="U028">予定一覧 ↗</RouteLink>}
-        >
-          <Row
-            title={first.title}
-            sub={`${first.date.replace(/-/g, ".")} ${first.time} / ${first.host}`}
-            image={first.image}
-            id="U029"
-            item={first.id}
-          />
-          <div className="button-row" style={{ marginTop: 10 }}>
-            <Button id="U032" tone="ghost" icon="bell">
-              通知する
-            </Button>
-            <Button id="U029" icon="play">
-              詳細を見る
-            </Button>
-          </div>
-        </Panel>
-      )}
-      {screen.id !== "U027" && (
-        <Panel className="space-live" title="今、つながろう。">
-          <span className="live-label">
-            <span className="live-dot" />
-            LIVE SPACE
-          </span>
-          <Row
-            title={state.rooms[0].title}
-            sub={`${state.rooms[0].host} · ${state.rooms[0].listeners}人が参加中`}
-            image="/assets/avatar.jpg"
-            id="U044"
-          />
-          <Button id="U044" tone="gold" className="full" icon="mic">
-            スペースに参加する
-          </Button>
-        </Panel>
-      )}
-      <div className="feature-grid">
-        {[
-          ["U028", "calendar", "配信カレンダー", "次のワクワクを。"],
-          ["U076", "ticket", "マン組ガチャ", "チケットで運試し！"],
-          ["U055", "dm", "マン組にDM", "気持ちを届けよう。"],
-          ["U065", "heart", "マン組を応援", "ありがとうをカタチに。"],
-        ]
-          .filter((row) => screen.id !== "U027" || row[0] === "U028")
-          .map(([id, icon, title, sub]) => (
-            <RouteLink key={id} id={id} className="feature-card">
-              <Icon name={icon as "calendar"} size={25} />
-              <strong>{title}</strong>
-              <small>{sub}</small>
-            </RouteLink>
-          ))}
-      </div>
-      <Panel
-        title="お知らせ"
-        action={<RouteLink id="U023">すべて見る ↗</RouteLink>}
-      >
-        {state.notices
-          .filter((n) => n.status === "公開")
-          .map((n) => (
-            <Row
-              key={n.id}
-              title={n.title}
-              sub="マン組運営から"
-              id="U024"
-              item={n.id}
-            />
-          ))}
-      </Panel>
-      {screen.id === "U027" && (
-        <Notice>
-          Freeプランで配信予定と通知をご利用いただけます。新しい機能も順次公開予定です。
-        </Notice>
-      )}
-    </div>
-  );
+  return <HomeShowcase freeOnly={screen.id === "U027"} />;
 }
 
 export function IntroPage({ screen }: { screen: Screen }) {

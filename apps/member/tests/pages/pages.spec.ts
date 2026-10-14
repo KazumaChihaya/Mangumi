@@ -57,6 +57,7 @@ test("catalog links, client navigation, reloads and decorative assets retain the
     );
   expect(links).toHaveLength(206);
   expect(links.every((href) => href?.startsWith(base + "/"))).toBe(true);
+  await page.setViewportSize({ width: 460, height: 920 });
   await page.getByRole("link", { name: "アプリへ", exact: true }).click();
   await expect(page.getByTestId("U022")).toBeVisible();
   expect(new URL(page.url()).pathname).toBe(base + "/");
@@ -67,12 +68,38 @@ test("catalog links, client navigation, reloads and decorative assets retain the
     .evaluate((body) =>
       getComputedStyle(body).getPropertyValue("--chrome-frame"),
     );
-  expect(frame).toContain(base + "/assets/chrome-frame.svg");
+  expect(frame).toContain(base + "/assets/cabinet-bezel-v2.png");
+  await page.screenshot({
+    path: "../../.local/preview/jackpot-home.png",
+    fullPage: true,
+    animations: "disabled",
+  });
   await page.getByRole("link", { name: "全画面", exact: true }).click();
   await page.getByRole("link", { name: "管理画面へ", exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByTestId("A008")).toBeVisible();
+  await page.screenshot({
+    path: "../../.local/preview/jackpot-admin.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "../../.local/preview/jackpot-admin-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
   await page.reload();
   await expect(page.getByTestId("A008")).toBeVisible();
+  await page.goto(base + "/gacha/");
+  await expect(page.getByTestId("U076")).toBeVisible();
+  await page.screenshot({
+    path: "../../.local/preview/jackpot-gacha.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.reload();
+  await expect(page.getByTestId("U076")).toBeVisible();
 });
 
 test("PWA uses the repository scope and returns the offline page", async ({

@@ -390,7 +390,8 @@ export function GachaPage({ screen }: { screen: Screen }) {
         className={`slot-machine ${spinning ? "spinning" : ""}`}
         aria-busy={spinning}
       >
-        <div className="slot-title">MANZOU CHANCE</div>
+        <div className="slot-title">脳汁ガチャ</div>
+        <div className="slot-kicker">MANZOU CHANCE</div>
         <div className="slot-reels">
           {["7", "★", "7"].map((symbol, i) => (
             <div className="slot-reel" key={i}>
