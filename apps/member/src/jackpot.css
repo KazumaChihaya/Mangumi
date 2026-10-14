@@ -1,4 +1,7 @@
 /* The mood references use physical cabinet trim, bright lamps and deep black glass. */
+/* The square asset has equal 26% corner slices and equal border widths.
+   `repeat` scales every rail uniformly, then tiles/clips it to the available length.
+   Never use `stretch`, `round`, or independent background width/height for this art. */
 :root {
   --gold: #ffe36a;
   --muted: #cec3d9;
@@ -25,29 +28,12 @@
 }
 .member-app {
   border-width: 22px;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.8;
   background: #070309;
   box-shadow:
     0 0 30px #ff173eaa,
     0 0 90px #8b00ff77;
-}
-.member-app::before,
-.member-app::after {
-  width: 20px;
-  background: var(--chrome-frame) left top / 700% 100% no-repeat;
-  box-shadow:
-    0 0 9px #fff1ac,
-    0 0 18px #ff0040;
-  animation: cabinet-rail 4s ease-in-out infinite alternate;
-}
-.member-app::before {
-  left: -22px;
-}
-.member-app::after {
-  right: -22px;
-  background-position: right top;
-  animation-delay: -2s;
 }
 .member-masthead {
   aspect-ratio: 2.7;
@@ -102,7 +88,7 @@
   letter-spacing: 3px;
   color: #ffe379;
   border: 5px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   text-shadow: 0 0 12px #ff9914;
 }
 .member-content {
@@ -144,7 +130,7 @@
 .catalog-card,
 .gacha-confirm {
   border: 14px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.8;
   border-radius: 0;
   background:
@@ -216,7 +202,7 @@
 }
 .page-heading {
   border: 10px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   padding: 6px 4px;
   background: linear-gradient(#350813, #06070c);
   gap: 6px;
@@ -345,7 +331,7 @@
 }
 .feature-card {
   border: 9px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: radial-gradient(ellipse at top, #650061b3, #08050d 76%);
   border-radius: 0;
   padding: 10px;
@@ -376,7 +362,7 @@
 }
 .bottom-nav {
   border-width: 13px;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.8;
   height: 90px;
   width: calc(100% - 36px);
@@ -408,7 +394,7 @@
 }
 .slot-machine {
   border: 22px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.65;
   background:
     linear-gradient(#24000682, #130005c9),
@@ -432,7 +418,7 @@
 }
 .slot-reel {
   border: 9px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   height: 112px;
 }
 .slot-reel span {
@@ -490,8 +476,7 @@
 }
 .admin-marquee {
   height: clamp(70px, 9vw, 156px);
-  border-bottom: 15px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-bottom: 7px solid #e8b958;
   filter: saturate(1.15);
   box-shadow: 0 0 30px #ff004f96;
 }
@@ -503,7 +488,7 @@
 .admin-sidebar,
 .admin-main {
   border: 17px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.8;
   box-shadow: 0 0 14px #ff991459;
   background: linear-gradient(#1e071d, #06060af9 24%);
@@ -535,8 +520,7 @@
   min-height: 154px;
   padding: 25px 28px;
   background: #080307;
-  border-bottom: 10px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-bottom: 4px solid #e8b958;
 }
 .admin-banner > img {
   opacity: 0.82;
@@ -611,7 +595,7 @@ td {
 .catalog-header {
   padding: 18px;
   border: 16px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: linear-gradient(100deg, #280310ce, #08050bec);
   box-shadow: 0 0 20px #fa144e66;
 }
@@ -678,7 +662,7 @@ td {
 .broadcast-billboard {
   position: relative;
   border: 17px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.7;
   background: radial-gradient(ellipse at right, #6b0048a6, #08060c 75%);
   box-shadow: 0 0 19px #ff371080;
@@ -876,7 +860,7 @@ td {
   min-height: 143px;
   overflow: hidden;
   border: 15px solid transparent;
-  border-image: var(--chrome-frame) 26% stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-image-width: 1.7;
   box-shadow: 0 0 20px #ff8900;
   background: #17030a;
@@ -941,14 +925,6 @@ td {
 }
 .home-shortcuts .feature-card strong {
   font-size: 12px;
-}
-@keyframes cabinet-rail {
-  from {
-    filter: brightness(0.85) saturate(1);
-  }
-  to {
-    filter: brightness(1.45) saturate(1.4);
-  }
 }
 @keyframes cabinet-glint {
   0%,
@@ -1035,14 +1011,6 @@ td {
   .member-app {
     border-width: 18px;
   }
-  .member-app::before {
-    left: -18px;
-    width: 18px;
-  }
-  .member-app::after {
-    right: -18px;
-    width: 18px;
-  }
   .member-content {
     padding-inline: 5px;
   }
@@ -1057,16 +1025,6 @@ td {
 @media (max-width: 360px) {
   .member-app {
     border-width: 14px;
-  }
-  .member-app::before {
-    left: -14px;
-  }
-  .member-app::after {
-    right: -14px;
-  }
-  .member-app::before,
-  .member-app::after {
-    width: 15px;
   }
   .panel,
   .admin-content .panel {
@@ -1141,15 +1099,11 @@ td {
 }
 @media (prefers-reduced-motion: reduce) {
   .cabinet-lights i,
-  .member-app::before,
-  .member-app::after,
   .live-dot {
     animation: none;
   }
 }
 html[data-motion="reduced"] .cabinet-lights i,
-html[data-motion="reduced"] .member-app::before,
-html[data-motion="reduced"] .member-app::after,
 html[data-motion="reduced"] .live-dot {
   animation: none;
 }

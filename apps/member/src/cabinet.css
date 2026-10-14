@@ -25,38 +25,12 @@
 }
 .member-app {
   border: 10px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: linear-gradient(160deg, #080a11, #0c0512 65%, #050710);
   box-shadow:
     0 0 0 3px #29191c,
     0 0 24px #f4286744,
     0 0 75px #5f19ff22;
-}
-.member-app:before,
-.member-app:after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 8px;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    180deg,
-    #e62b58 0,
-    #94042c 28px,
-    #fada8d 30px,
-    #300a47 65px,
-    #903bf3 68px,
-    #16072b 100px
-  );
-  box-shadow: 0 0 10px #f426af77;
-  z-index: 2;
-}
-.member-app:before {
-  left: -8px;
-}
-.member-app:after {
-  right: -8px;
 }
 .member-header {
   padding: 0;
@@ -190,7 +164,7 @@
   text-shadow: 1px 2px #57301a;
   background: linear-gradient(#211713, #060711 25%, #13161e 60%, #050607);
   border: 4px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   padding: 3px;
 }
 .cabinet-label > span {
@@ -207,7 +181,7 @@
 .panel {
   position: relative;
   border: 7px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-radius: 0;
   background:
     radial-gradient(ellipse at top, #27203055, transparent 75%),
@@ -240,7 +214,7 @@
 }
 .hero {
   border: 8px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-radius: 0;
   box-shadow:
     0 0 15px #ff265559,
@@ -495,7 +469,7 @@
 }
 .bottom-nav {
   border: 7px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: linear-gradient(#11151f, #03060b);
   height: 81px;
   box-shadow: 0 0 12px #c4134088;
@@ -532,7 +506,7 @@
 }
 .slot-machine {
   border: 12px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-radius: 0;
   background:
     radial-gradient(ellipse, #8c090b66, #120612 65%),
@@ -562,7 +536,7 @@
 .slot-reel {
   height: 120px;
   border: 5px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-radius: 0;
   box-shadow:
     0 0 12px #e7174a,
@@ -597,7 +571,7 @@
   color: #fff5ce;
   padding: 22px;
   border: 8px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   box-shadow:
     0 0 0 100vmax #020209bb,
     0 0 35px #f6247499;
@@ -630,7 +604,7 @@
 }
 .image-card {
   border: 3px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-radius: 0;
   background: #070a13;
 }
@@ -646,12 +620,12 @@
 .plan-card {
   background: linear-gradient(#31171a, #08070e);
   border: 6px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   border-radius: 0;
 }
 .plan-card.featured {
   border: 8px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   box-shadow: 0 0 25px #f9367566;
 }
 .effect-controls button {
@@ -682,8 +656,7 @@
   width: 100%;
   height: clamp(100px, 10vw, 166px);
   background: #0b030a var(--admin-backdrop) center top/100% auto no-repeat;
-  border-bottom: 7px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-bottom: 7px solid #e8b958;
   overflow: hidden;
   box-shadow: 0 0 20px #fa156e77;
 }
@@ -713,7 +686,7 @@
 .admin-sidebar {
   background: linear-gradient(150deg, #1f0c14, #080a12 35%, #090610);
   border: 5px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   width: 238px;
   box-shadow: 0 0 14px #e2235255;
 }
@@ -752,7 +725,7 @@
 }
 .admin-main {
   border: 6px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: linear-gradient(125deg, #0b0e15, #080910);
   min-width: 0;
 }
@@ -789,7 +762,7 @@
 }
 .admin-content .panel {
   border: 6px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: linear-gradient(135deg, #13111d, #070b12);
   box-shadow: 0 0 12px #e1286e22;
 }
@@ -810,7 +783,7 @@
 }
 .metric {
   border: 4px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: radial-gradient(ellipse at top, #561e3166, #10101a 80%);
   border-radius: 0;
   box-shadow: 0 0 10px #db184630;
@@ -863,7 +836,7 @@ tbody tr:hover {
 }
 .catalog-card {
   border: 5px solid transparent;
-  border-image: var(--chrome-frame) 12 stretch;
+  border-image: var(--chrome-frame) 26% repeat;
   background: linear-gradient(#241423, #080b12);
   border-radius: 0;
 }
