@@ -2,6 +2,7 @@ import React, { useId, useState } from "react";
 import { useRouter, type Href } from "expo-router";
 import { screenPath } from "./registry";
 import { useStore } from "./store";
+import { publicPath } from "./web-path";
 type IconName =
   | "home"
   | "calendar"
@@ -86,7 +87,7 @@ export function RouteLink({
     screenPath(id) + (item ? `?item=${encodeURIComponent(item)}` : "");
   return (
     <a
-      href={href}
+      href={publicPath(href)}
       className={className}
       onClick={(event) => {
         if (
@@ -350,7 +351,7 @@ export function Row({
 }) {
   const content = (
     <>
-      {image && <img src={image} className="row-image" alt="" />}
+      {image && <img src={publicPath(image)} className="row-image" alt="" />}
       <span className="row-content">
         <strong>{title}</strong>
         {sub && <small>{sub}</small>}
@@ -434,7 +435,7 @@ export function Hero({
 }) {
   return (
     <section className="hero">
-      <img src={`/assets/${asset}.jpg`} alt="" />
+      <img src={publicPath(`/assets/${asset}.jpg`)} alt="" />
       <div className="hero-overlay" />
       <div className="hero-content">
         <Badge tone="pink">{label}</Badge>

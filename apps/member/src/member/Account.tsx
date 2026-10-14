@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
 import { useStore } from "../store";
@@ -38,7 +39,7 @@ export function AccountPage({ screen }: { screen: Screen }) {
         <Panel>
           <div className="profile-summary">
             <img
-              src={state.profile.avatar}
+              src={publicPath(state.profile.avatar)}
               className="avatar-large"
               alt="あなたのプロフィール"
             />
@@ -98,7 +99,7 @@ export function AccountPage({ screen }: { screen: Screen }) {
         >
           <div className="profile-summary">
             <img
-              src={state.profile.avatar}
+              src={publicPath(state.profile.avatar)}
               className="avatar-large"
               alt="プロフィール"
             />
@@ -144,7 +145,7 @@ export function AccountPage({ screen }: { screen: Screen }) {
             >
               <img
                 ref={imageRef}
-                src={avatar}
+                src={publicPath(avatar)}
                 alt="切り抜きプレビュー"
                 style={{
                   width: "100%",

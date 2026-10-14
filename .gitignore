@@ -1,8 +1,10 @@
 node_modules/
 .expo/
 dist/
+dist-pages/
 coverage/
 test-results/
+test-results-pages/
 playwright-report/
 .local/
 .env

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
 import { useStore } from "../store";
@@ -125,12 +126,12 @@ export function HomePage({ screen }: { screen: Screen }) {
               item={story.id}
               className={`story-avatar ${story.viewed ? "viewed" : ""}`}
             >
-              <img src={story.image} alt={story.title} />
+              <img src={publicPath(story.image)} alt={story.title} />
               <span>{story.title.slice(0, 8)}</span>
             </RouteLink>
           ))}
         <RouteLink id="U037" className="story-avatar">
-          <img src="/assets/avatar.jpg" alt="ハイライト" />
+          <img src={publicPath("/assets/avatar.jpg")} alt="ハイライト" />
           <span>ハイライト</span>
         </RouteLink>
       </div>
@@ -450,7 +451,7 @@ export function AuthPage({ screen }: { screen: Screen }) {
           >
             <div className="upload-box">
               <img
-                src={avatar}
+                src={publicPath(avatar)}
                 className="avatar-large"
                 alt="プロフィール写真"
               />
@@ -683,7 +684,7 @@ export function AuthPage({ screen }: { screen: Screen }) {
           <div className="profile-summary">
             <img
               className="avatar-large"
-              src={state.profile.avatar}
+              src={publicPath(state.profile.avatar)}
               alt="プロフィール写真"
             />
             <div>

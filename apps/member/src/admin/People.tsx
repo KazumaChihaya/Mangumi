@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import type { Screen } from "../registry";
 import { screenPath } from "../registry";
@@ -81,7 +82,7 @@ export function MembersPage({ screen }: { screen: Screen }) {
             rows={filtered.map((m) => [
               <span className="space-between" key={m.id}>
                 <img
-                  src="/assets/avatar.jpg"
+                  src={publicPath("/assets/avatar.jpg")}
                   alt=""
                   style={{ width: 28, height: 28, borderRadius: "50%" }}
                 />
@@ -113,7 +114,7 @@ export function MembersPage({ screen }: { screen: Screen }) {
           <div className="profile-summary">
             <img
               className="avatar-large"
-              src="/assets/avatar.jpg"
+              src={publicPath("/assets/avatar.jpg")}
               alt={member.name}
             />
             <div>

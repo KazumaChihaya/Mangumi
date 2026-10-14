@@ -21,6 +21,24 @@ UI案は画面構成の根拠、別途提供された「雰囲気イメージ」
 
 ## 起動と画面確認
 
+### GitHub Pagesで確認する
+
+公開先は `https://kazumachihaya.github.io/Mangumi/`、全画面一覧は `/Mangumi/screens/`、管理画面は `/Mangumi/admin/` です。WindowsのサーバーやTailscaleを使わず、Mac・スマートフォンからHTTPSで確認できます。サンプルデータを使うUIプレビューとして公開し、本番認証・決済は未接続です。
+
+初回のみ、`KazumaChihaya/Mangumi` の **Settings → Pages → Build and deployment → Source** を **GitHub Actions** に設定します。その後は `master` へのpushで `.github/workflows/pages.yml` がビルド・検証・公開を実行します。先にpushして初回の公開が失敗した場合は、設定後に **Actions → Deploy UI preview to GitHub Pages → Re-run failed jobs** を実行してください。
+
+PrivateリポジトリのPagesにはGitHub Pro以上の対応プランが必要です。GitHub Freeのまま公開する場合はPublicリポジトリが必要です。リポジトリの公開範囲は自動では変更しません。
+
+```powershell
+pnpm build:pages
+pnpm test:pages
+node scripts/serve.mjs --pages
+```
+
+Pages用の出力先は `apps/member/dist-pages/`、ローカル確認先は `http://localhost:4183/Mangumi/` です。`/Mangumi` 配下のリンク・画像・PWAスコープと、全204項目の表示、ページ移動、再読み込み、オフライン画面を検証します。GitHub Pagesのディレクトリ形式に合わせて各ルートの `index.html` と `404.html` を生成します。
+
+### ローカルで確認する
+
 Node.js 24、pnpm 11で開発しています。
 
 ```powershell

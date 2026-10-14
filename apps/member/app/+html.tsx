@@ -1,4 +1,5 @@
 import React from "react";
+import { publicPath } from "../src/web-path";
 export default function Root({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
@@ -13,10 +14,19 @@ export default function Root({ children }: { children: React.ReactNode }) {
           name="description"
           content="マン組の公式ファンアプリ。配信、スペース、DM、ストーリーで最高の瞬間を一緒に。"
         />
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/icon.svg" />
+        <link rel="manifest" href={publicPath("/manifest.json")} />
+        <link rel="icon" href={publicPath("/icon.svg")} />
       </head>
-      <body>{children}</body>
+      <body
+        style={
+          {
+            "--chrome-frame": `url("${publicPath("/assets/chrome-frame.svg")}")`,
+            "--admin-backdrop": `url("${publicPath("/assets/mood-admin.png")}")`,
+          } as React.CSSProperties
+        }
+      >
+        {children}
+      </body>
     </html>
   );
 }

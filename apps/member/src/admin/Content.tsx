@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams } from "expo-router";
 import type { Screen } from "../registry";
 import { useStore } from "../store";
@@ -35,7 +36,7 @@ export function AssetUpload({
   const [error, setError] = useState("");
   return (
     <div className="upload-box">
-      {value && <img src={value} alt="素材プレビュー" />}
+      {value && <img src={publicPath(value)} alt="素材プレビュー" />}
       <label className="field">
         <span>{label}</span>
         <input

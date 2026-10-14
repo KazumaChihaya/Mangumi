@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { publicPath } from "./web-path";
 import { useStore } from "./store";
 import { Icon, RouteLink, SoundControls, Badge } from "./ui";
 import {
@@ -66,7 +67,7 @@ export function Shell({
           UIプレビュー <small>サンプルデータ</small>
         </span>
         <div>
-          <a href="/screens">全画面</a>
+          <a href={publicPath("/screens")}>全画面</a>
           <RouteLink id={admin ? "U022" : "A008"}>
             {admin ? "アプリへ" : "管理画面"}
           </RouteLink>
@@ -110,7 +111,7 @@ export function Shell({
                 })}
               </nav>
               <div className="sidebar-footer">
-                <img src="/assets/avatar.jpg" alt="" />
+                <img src={publicPath("/assets/avatar.jpg")} alt="" />
                 <div>
                   <strong>運営管理者</strong>
                   <small>
@@ -147,7 +148,7 @@ export function Shell({
                 />
               )}
               <section className="admin-banner">
-                <img src="/assets/hero_admin.jpg" alt="" />
+                <img src={publicPath("/assets/hero_admin.jpg")} alt="" />
                 <div />
                 <span className="eyebrow">MANZOU LOVE / MANAGEMENT</span>
                 <h1>{shortTitle(screen.title)}</h1>
@@ -202,7 +203,7 @@ export function Shell({
               <div className="member-masthead">
                 <RouteLink id="U022" className="masthead-art">
                   <img
-                    src="/assets/mood-cabinet.png"
+                    src={publicPath("/assets/mood-cabinet.png")}
                     alt={state.settings.name}
                   />
                 </RouteLink>

@@ -2,10 +2,17 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+const pagesMode = process.argv.includes("--pages");
+const basePath = pagesMode ? "/Mangumi" : "";
 const root = resolve(
-  fileURLToPath(new URL("../apps/member/dist/", import.meta.url)),
+  fileURLToPath(
+    new URL(
+      pagesMode ? "../apps/member/dist-pages/" : "../apps/member/dist/",
+      import.meta.url,
+    ),
+  ),
 );
-const port = Number(process.env.PORT || 4173);
+const port = Number(process.env.PORT || (pagesMode ? 4183 : 4173));
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript",
@@ -28,13 +35,24 @@ createServer(async (req, res) => {
     const pathname = decodeURIComponent(
       new URL(req.url, "http://localhost").pathname,
     );
-    const base = resolve(root, "." + pathname);
+    if (
+      basePath &&
+      pathname !== basePath &&
+      !pathname.startsWith(basePath + "/")
+    ) {
+      res.writeHead(404);
+      res.end("Outside preview base path");
+      return;
+    }
+    const base = resolve(root, "." + (pathname.slice(basePath.length) || "/"));
     if (base !== root && !base.startsWith(root + sep)) {
       res.writeHead(403);
       res.end();
       return;
     }
-    const candidates = [base, base + ".html", resolve(base, "index.html")];
+    const candidates = pagesMode
+      ? [base, resolve(base, "index.html")]
+      : [base, base + ".html", resolve(base, "index.html")];
     let file;
     for (const candidate of candidates)
       if (await exists(candidate)) {
@@ -64,5 +82,7 @@ createServer(async (req, res) => {
     res.end("Bad request");
   }
 }).listen({ port, host: "::", ipv6Only: false }, () =>
-  process.stdout.write(`Mangumi preview: http://localhost:${port}\n`),
+  process.stdout.write(
+    `Mangumi preview: http://localhost:${port}${basePath}/\n`,
+  ),
 );

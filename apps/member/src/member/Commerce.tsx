@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
 import { useStore } from "../store";
@@ -224,7 +225,7 @@ export function GachaPage({ screen }: { screen: Screen }) {
                   className="image-card win-card"
                 >
                   <img
-                    src={result.image}
+                    src={publicPath(result.image)}
                     alt={result.title}
                     style={{ height: screen.id === "U083" ? 125 : 230 }}
                   />
@@ -272,7 +273,7 @@ export function GachaPage({ screen }: { screen: Screen }) {
                 item={result.id}
                 className="image-card"
               >
-                <img src={result.image} alt={result.title} />
+                <img src={publicPath(result.image)} alt={result.title} />
                 <div>
                   <Badge>{result.rarity}</Badge>
                   <h3>{result.title}</h3>
@@ -300,7 +301,11 @@ export function GachaPage({ screen }: { screen: Screen }) {
     const result = state.draws.find((d) => d.id === item) ?? state.draws[0];
     return result ? (
       <>
-        <img src={result.image} className="schedule-cover" alt={result.title} />
+        <img
+          src={publicPath(result.image)}
+          className="schedule-cover"
+          alt={result.title}
+        />
         <Panel title={result.title}>
           <Badge>{result.rarity}</Badge>
           <dl className="detail-grid">
@@ -465,7 +470,7 @@ export function GachaPage({ screen }: { screen: Screen }) {
         <div className="image-grid">
           {state.probabilities.slice(0, 2).map((p) => (
             <div className="image-card" key={p.title}>
-              <img src={p.image} alt={p.title} />
+              <img src={publicPath(p.image)} alt={p.title} />
               <div>
                 <Badge>{p.rarity}</Badge>
                 <h3>{p.title}</h3>
@@ -513,7 +518,11 @@ export function TipPage({ screen }: { screen: Screen }) {
                 go("U065");
               }}
             >
-              <img src="/assets/avatar.jpg" className="row-image" alt="" />
+              <img
+                src={publicPath("/assets/avatar.jpg")}
+                className="row-image"
+                alt=""
+              />
               <span className="row-content">
                 <strong>{name}</strong>
                 <small>公式配信者</small>

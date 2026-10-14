@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams } from "expo-router";
 import { useStore } from "../store";
 import { safeLink } from "../model";
@@ -64,7 +65,7 @@ export function CalendarPage({
       <>
         <img
           className="schedule-cover"
-          src={selected.image}
+          src={publicPath(selected.image)}
           alt={selected.title}
         />
         <Panel>

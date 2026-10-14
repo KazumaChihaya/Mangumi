@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
 import { useStore } from "../store";
@@ -83,7 +84,7 @@ export function StoryPage({ screen }: { screen: Screen }) {
     return (
       <>
         <div className="story-view">
-          <img src={story.image} alt={story.title} />
+          <img src={publicPath(story.image)} alt={story.title} />
           <div className="story-progress">
             {state.stories.map((s) => (
               <i key={s.id} className={s.id === story.id ? "active" : ""} />
@@ -166,7 +167,7 @@ export function StoryPage({ screen }: { screen: Screen }) {
       <div className="image-grid">
         {stories.map((s) => (
           <RouteLink id="U035" item={s.id} key={s.id} className="image-card">
-            <img src={s.image} alt={s.title} />
+            <img src={publicPath(s.image)} alt={s.title} />
             <div>
               <Badge tone={s.viewed ? "gray" : "pink"}>
                 {s.viewed ? "VIEWED" : "NEW"}
@@ -490,7 +491,7 @@ export function VoicePage({ screen }: { screen: Screen }) {
         <div className="speaker-grid">
           {["まんぞう", "マン組", state.profile.name].map((name, i) => (
             <div className="speaker" key={name}>
-              <img src="/assets/avatar.jpg" alt={name} />
+              <img src={publicPath("/assets/avatar.jpg")} alt={name} />
               <strong>{name}</strong>
               <small>
                 {i === 0

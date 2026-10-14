@@ -18,6 +18,7 @@ import {
 import { ModerationPage, PaymentsAdmin, GachaAdmin } from "./admin/Operations";
 import { BrandPage, SystemsPage, AdministratorsPage } from "./admin/Settings";
 import { Button } from "./ui";
+import { publicPath } from "./web-path";
 export const renderers = [
   { area: "U", from: 1, to: 8, component: IntroPage },
   { area: "U", from: 9, to: 21, component: AuthPage },
@@ -62,7 +63,7 @@ export default function ScreenPage({ id }: { id: string }) {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker
-      .register("/sw.js")
+      .register(publicPath("/sw.js"))
       .then((registration) => {
         registration.addEventListener("updatefound", () => {
           const worker = registration.installing;
