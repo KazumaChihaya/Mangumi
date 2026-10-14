@@ -63,6 +63,6 @@ createServer(async (req, res) => {
     res.writeHead(400);
     res.end("Bad request");
   }
-}).listen(port, "0.0.0.0", () =>
+}).listen({ port, host: "::", ipv6Only: false }, () =>
   process.stdout.write(`Mangumi preview: http://localhost:${port}\n`),
 );
