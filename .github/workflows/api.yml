@@ -39,6 +39,8 @@ jobs:
               tcp_port: 17881
               udp_port: 17882
               use_external_ip: false
+              # CI browser and SFU share a host; include its loopback ICE candidate.
+              enable_loopback_candidate: true
             keys:
               mangumitest: mangumi-local-test-secret-only-20261020-42
         run: docker run --detach --rm --name mangumi-voice-ci --network host -e LIVEKIT_CONFIG livekit/livekit-server@sha256:89ca9ce0791e18d6e03bf6e2c49ceb27e1c754eae8bd50c989386c1a5963791a --config-body "$LIVEKIT_CONFIG" --node-ip 127.0.0.1 --bind 0.0.0.0
@@ -46,9 +48,13 @@ jobs:
         env:
           MANGUMI_TEST_LIVEKIT_URL: ws://127.0.0.1:17880
       - if: failure()
+        run: docker logs mangumi-voice-ci > .local/livekit-ci.log 2>&1 || true
+      - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: connected-app-failures
-          path: apps/member/test-results-live
+          path: |
+            apps/member/test-results-live
+            .local/livekit-ci.log
       - if: always()
         run: docker stop mangumi-voice-ci || true
