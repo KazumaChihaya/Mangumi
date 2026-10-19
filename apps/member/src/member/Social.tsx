@@ -42,17 +42,26 @@ export function Waveform({ paused = false }: { paused?: boolean }) {
   );
 }
 export function StoryPage({ screen }: { screen: Screen }) {
-  const { state, update } = useStore();
+  const { state, update, notify } = useStore();
   const { item } = useLocalSearchParams<{ item?: string }>();
   const [paused, setPaused] = useState(false);
   const router = useRouter();
   const story = state.stories.find((s) => s.id === item) ?? state.stories[0];
   useEffect(() => {
-    if (["U035", "U039"].includes(screen.id) && !story.viewed)
-      update((d) => {
+    if (story && ["U035", "U039"].includes(screen.id) && !story.viewed)
+      void update((d) => {
         d.stories.find((s) => s.id === story.id)!.viewed = true;
-      });
-  }, [screen.id, story.id]);
+      }).catch((error) => notify(error.message));
+  }, [screen.id, story?.id]);
+  if (!story)
+    return (
+      <Panel>
+        <Empty
+          title="公開中のストーリーはありません"
+          text="次の更新をお楽しみに。"
+        />
+      </Panel>
+    );
   if (
     screen.id === "U038" ||
     (["U035", "U039"].includes(screen.id) &&
@@ -198,8 +207,8 @@ export function VoicePage({ screen }: { screen: Screen }) {
     state.rooms.find((r) => r.id === (item ?? state.activeRoom)) ??
     state.rooms[0];
   const go = (id: string) => router.push(screenPath(id) as Href);
-  const join = () => {
-    update((d) => {
+  const join = async () => {
+    await update((d) => {
       d.activeRoom = room.id;
       d.muted = true;
     });
@@ -316,8 +325,8 @@ export function VoicePage({ screen }: { screen: Screen }) {
       <Panel title="新しいスペース">
         <Form
           submit="ルームを作成"
-          onSubmit={(v) => {
-            update(
+          onSubmit={async (v) => {
+            await update(
               (d) => {
                 d.rooms.unshift({
                   id: crypto.randomUUID(),
@@ -459,8 +468,8 @@ export function VoicePage({ screen }: { screen: Screen }) {
         </Panel>
         <Button
           tone="danger"
-          onClick={() => {
-            update(
+          onClick={async () => {
+            await update(
               (d) => {
                 d.activeRoom = null;
                 d.rooms.find((r) => r.id === room.id)!.status = "終了";
@@ -515,8 +524,8 @@ export function VoicePage({ screen }: { screen: Screen }) {
           <Button
             tone="ghost"
             icon="mic"
-            onClick={() => {
-              update((d) => {
+            onClick={async () => {
+              await update((d) => {
                 d.speaking = !d.speaking;
               });
               notify(
@@ -531,8 +540,8 @@ export function VoicePage({ screen }: { screen: Screen }) {
           <Button
             tone="ghost"
             icon={state.muted ? "mute" : "sound"}
-            onClick={() => {
-              update((d) => {
+            onClick={async () => {
+              await update((d) => {
                 d.muted = !d.muted;
               });
               notify(
@@ -555,8 +564,8 @@ export function VoicePage({ screen }: { screen: Screen }) {
         </Button>
         <Button
           tone="danger"
-          onClick={() => {
-            update((d) => {
+          onClick={async () => {
+            await update((d) => {
               d.activeRoom = null;
               d.speaking = false;
             });
@@ -595,7 +604,7 @@ export function DMPage({ screen }: { screen: Screen }) {
     },
     [],
   );
-  const send = (text: string, audio = false) => {
+  const send = async (text: string, audio = false) => {
     if (state.blocked) {
       notify("ブロック中はメッセージを送れません");
       return;
@@ -604,7 +613,7 @@ export function DMPage({ screen }: { screen: Screen }) {
       setError("オフラインです。接続してから再送してください。");
       return;
     }
-    update((d) => {
+    await update((d) => {
       d.messages.push({
         id: crypto.randomUUID(),
         text,
@@ -660,8 +669,8 @@ export function DMPage({ screen }: { screen: Screen }) {
       <Panel title="安心して楽しむために">
         <Form
           submit="通報を送信"
-          onSubmit={(v) => {
-            update(
+          onSubmit={async (v) => {
+            await update(
               (d) => {
                 const reportId = crypto.randomUUID();
                 d.reports.unshift({
@@ -706,8 +715,8 @@ export function DMPage({ screen }: { screen: Screen }) {
         <Button
           tone="danger"
           className="full"
-          onClick={() => {
-            update((d) => {
+          onClick={async () => {
+            await update((d) => {
               d.blocked = true;
             });
             notify("相手をブロックしました");
@@ -766,8 +775,8 @@ export function DMPage({ screen }: { screen: Screen }) {
         text="自分が送信した最後のメッセージを取り消します。"
         action="送信を取り消す"
         back="U056"
-        onConfirm={() => {
-          update((d) => {
+        onConfirm={async () => {
+          await update((d) => {
             const index = d.messages.map((m) => m.mine).lastIndexOf(true);
             if (index >= 0) d.messages.splice(index, 1);
           });

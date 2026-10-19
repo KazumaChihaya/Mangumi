@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/.local
+**/.expo
+**/dist
+**/dist-pages
+**/dist-live
+**/test-results*
+.env
+.env.*
+!.env.example
+**/*.sqlite*
+**/*.log

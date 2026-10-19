@@ -1,4 +1,4 @@
-import React, { useId, useState } from "react";
+import React, { useId, useState, useRef } from "react";
 import { useRouter, type Href } from "expo-router";
 import { screenPath } from "./registry";
 import { useStore } from "./store";
@@ -117,7 +117,7 @@ export function Button({
   icon,
 }: {
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: () => void | Promise<void>;
   id?: string;
   tone?: "primary" | "gold" | "ghost" | "danger";
   disabled?: boolean;
@@ -125,6 +125,9 @@ export function Button({
   className?: string;
   icon?: IconName;
 }) {
+  const { notify } = useStore();
+  const [busy, setBusy] = useState(false);
+  const running = useRef(false);
   const content = (
     <>
       {icon && <Icon name={icon} size={18} />}
@@ -141,8 +144,23 @@ export function Button({
     <button
       type={type}
       className={`button ${tone} ${className}`}
-      onClick={onClick}
-      disabled={disabled}
+      onClick={async () => {
+        if (!onClick || running.current) return;
+        running.current = true;
+        setBusy(true);
+        try {
+          await onClick();
+        } catch (error) {
+          notify(
+            error instanceof Error ? error.message : "処理できませんでした",
+            "notify",
+          );
+        } finally {
+          running.current = false;
+          setBusy(false);
+        }
+      }}
+      disabled={disabled || busy}
     >
       {content}
     </button>
@@ -283,24 +301,42 @@ export function Form({
   submit = "保存する",
   tone = "primary",
 }: {
-  children: React.ReactNode;
-  onSubmit: (values: Record<string, string>) => void;
+  children?: React.ReactNode;
+  onSubmit: (values: Record<string, string>) => void | Promise<void>;
   submit?: string;
   tone?: "primary" | "gold" | "danger";
 }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
   return (
     <form
       className="form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
+        if (pending) return;
         const values = Object.fromEntries(
           new FormData(event.currentTarget).entries(),
         ) as Record<string, string>;
-        onSubmit(values);
+        setPending(true);
+        setError("");
+        try {
+          await onSubmit(values);
+        } catch (error) {
+          setError(
+            error instanceof Error ? error.message : "保存できませんでした",
+          );
+        } finally {
+          setPending(false);
+        }
       }}
     >
       {children}
-      <Button type="submit" tone={tone}>
+      {error && (
+        <div className="notice error" role="alert">
+          {error}
+        </div>
+      )}
+      <Button type="submit" tone={tone} disabled={pending}>
         {submit}
         <Icon name="chevron" size={16} />
       </Button>
@@ -316,8 +352,9 @@ export function Toggle({
   label: string;
   description?: string;
   checked: boolean;
-  onChange: (value: boolean) => void;
+  onChange: (value: boolean) => void | Promise<void>;
 }) {
+  const { notify } = useStore();
   return (
     <label className="toggle-row">
       <span>
@@ -328,7 +365,14 @@ export function Toggle({
         type="checkbox"
         role="switch"
         checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
+        onChange={(event) => {
+          Promise.resolve(onChange(event.target.checked)).catch((error) =>
+            notify(
+              error instanceof Error ? error.message : "保存できませんでした",
+              "notify",
+            ),
+          );
+        }}
       />
       <span className="switch-track" aria-hidden="true" />
     </label>
@@ -459,7 +503,7 @@ export function Confirm({
   text: string;
   action: string;
   reason?: boolean;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string) => void | Promise<void>;
   back: string;
 }) {
   const [error, setError] = useState("");
@@ -467,12 +511,12 @@ export function Confirm({
     <Panel className="confirmation">
       <Empty icon="shield" title={title} text={text} />
       <Form
-        onSubmit={(values) => {
+        onSubmit={async (values) => {
           if (reason && !values.reason?.trim()) {
             setError("操作理由を入力してください");
             return;
           }
-          onConfirm(values.reason ?? "本人による確認");
+          await onConfirm(values.reason ?? "本人による確認");
         }}
         submit={action}
         tone="danger"

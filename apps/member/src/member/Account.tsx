@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
 import { useStore } from "../store";
 import { yen } from "../model";
+import { api, liveMode } from "../api";
 import {
   Badge,
   Button,
@@ -21,7 +22,7 @@ import {
 } from "../ui";
 export function AccountPage({ screen }: { screen: Screen }) {
   const { item } = useLocalSearchParams<{ item?: string }>();
-  const { state, update, notify, reset } = useStore();
+  const { state, update, notify, reset, refresh } = useStore();
   const router = useRouter();
   const [error, setError] = useState("");
   const [avatar, setAvatar] = useState(state.profile.avatar);
@@ -50,6 +51,23 @@ export function AccountPage({ screen }: { screen: Screen }) {
             </div>
           </div>
           <Row title="プロフィールを編集" id="U091" />
+          {liveMode && (state.profile as any).frameDrawId && (
+            <Button
+              tone="ghost"
+              onClick={async () => {
+                await api(
+                  "/me/frame",
+                  { drawId: null },
+                  "POST",
+                  "member",
+                  crypto.randomUUID(),
+                );
+                await refresh();
+              }}
+            >
+              プロフィールのフレームを外す
+            </Button>
+          )}
           <Row title="プランと特典" sub={state.profile.plan} id="U089" />
           <Row title="通知設定" id="U090" />
         </Panel>
@@ -84,12 +102,12 @@ export function AccountPage({ screen }: { screen: Screen }) {
     return (
       <Panel title="プロフィールを編集">
         <Form
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
             if (v.name.trim().length < 2 || v.name.trim().length > 30) {
               setError("ニックネームは2〜30文字にしてください");
               return;
             }
-            update((d) => {
+            await update((d) => {
               d.profile.name = v.name.trim();
               d.profile.gender = v.gender;
             });
@@ -192,7 +210,7 @@ export function AccountPage({ screen }: { screen: Screen }) {
           {error && <Notice tone="error">{error}</Notice>}
           <Button
             className="full"
-            onClick={() => {
+            onClick={async () => {
               const image = imageRef.current;
               if (!image?.complete) {
                 setError("画像の読み込みを待ってください");
@@ -216,7 +234,7 @@ export function AccountPage({ screen }: { screen: Screen }) {
                 256,
                 256,
               );
-              update((d) => {
+              await update((d) => {
                 d.profile.avatar = canvas.toDataURL("image/jpeg", 0.86);
               });
               notify("プロフィール写真を保存しました");
@@ -384,8 +402,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
       <Panel title="プラン変更をプレビュー">
         <Form
           submit="プレビューのプランを変更"
-          onSubmit={(v) => {
-            update(
+          onSubmit={async (v) => {
+            await update(
               (d) => {
                 d.profile.plan = v.plan;
               },
@@ -421,8 +439,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
         text="プレビューのプランをFreeへ変更します。実際の契約の解約は行いません。"
         action="Freeへ変更"
         back="U089"
-        onConfirm={() => {
-          update(
+        onConfirm={async () => {
+          await update(
             (d) => {
               d.profile.plan = "Free";
             },
@@ -476,8 +494,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
               <Button
                 tone="ghost"
                 className="small"
-                onClick={() => {
-                  update((d) => {
+                onClick={async () => {
+                  await update((d) => {
                     d.blocked = false;
                   });
                   notify("ブロックを解除しました");
@@ -511,8 +529,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
                 ) : (
                   <button
                     className="button ghost small"
-                    onClick={() => {
-                      update((d) => {
+                    onClick={async () => {
+                      await update((d) => {
                         d.sessions = d.sessions.filter(
                           (s) => s.id !== session.id,
                         );
@@ -539,8 +557,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
         text="このプレビューセッションを終了し、ログイン画面へ戻ります。"
         action="ログアウト"
         back="U098"
-        onConfirm={() => {
-          update((d) => {
+        onConfirm={async () => {
+          await update((d) => {
             d.profile.signedIn = false;
             d.sessions = [];
           });
@@ -630,8 +648,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
         <Panel title="お問い合わせ">
           <Form
             submit="問い合わせをプレビューに追加"
-            onSubmit={(v) => {
-              update((d) => {
+            onSubmit={async (v) => {
+              await update((d) => {
                 d.support.unshift({
                   id: crypto.randomUUID(),
                   subject: v.subject,
@@ -658,8 +676,8 @@ export function AccountPage({ screen }: { screen: Screen }) {
       action="プレビューの会員データを削除"
       back="U088"
       reason
-      onConfirm={() => {
-        update((d) => {
+      onConfirm={async () => {
+        await update((d) => {
           d.profile = {
             ...d.profile,
             name: "",

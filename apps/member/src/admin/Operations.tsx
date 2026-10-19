@@ -174,8 +174,8 @@ export function ModerationPage({ screen }: { screen: Screen }) {
         action="対応済みにする"
         reason
         back="A052"
-        onConfirm={(reason) => {
-          update(
+        onConfirm={async (reason) => {
+          await update(
             (d) => {
               const entry = d.reports.find((r) => r.id === report?.id);
               if (entry) {
@@ -248,8 +248,8 @@ export function ModerationPage({ screen }: { screen: Screen }) {
                   key="restore"
                   tone="ghost"
                   className="small"
-                  onClick={() => {
-                    update(
+                  onClick={async () => {
+                    await update(
                       (d) => {
                         d.members.find((x) => x.id === m.id)!.status = "有効";
                       },
@@ -285,8 +285,8 @@ export function ModerationPage({ screen }: { screen: Screen }) {
                 <Button
                   tone="gold"
                   className="small"
-                  onClick={() => {
-                    update(
+                  onClick={async () => {
+                    await update(
                       (d) => {
                         d.support.find((x) => x.id === s.id)!.status =
                           "対応完了";
@@ -461,12 +461,12 @@ export function PaymentsAdmin({ screen }: { screen: Screen }) {
         <Form
           submit="テスト返金を記録"
           tone="danger"
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
             if (!v.tip) {
               notify("返金対象がありません");
               return;
             }
-            update(
+            await update(
               (d) => {
                 const tip = d.tips.find((t) => t.id === v.tip);
                 if (tip) tip.status = "テスト返金済み";
@@ -515,13 +515,13 @@ export function PaymentsAdmin({ screen }: { screen: Screen }) {
     return (
       <Panel title="投げ銭金額と上限">
         <Form
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
             const max = Number(v.max);
             if (!validateTip(max, 100000)) {
               setError("上限は100〜100,000円の整数にしてください");
               return;
             }
-            update((d) => {
+            await update((d) => {
               d.settings.tipMax = max;
               d.records.A064 = v;
             }, "投げ銭上限変更");
@@ -709,8 +709,8 @@ export function GachaAdmin({ screen }: { screen: Screen }) {
       <>
         <Panel title="景品を登録">
           <Form
-            onSubmit={(v) => {
-              update(
+            onSubmit={async (v) => {
+              await update(
                 (d) => {
                   d.probabilities.push({
                     title: v.title,
@@ -769,7 +769,7 @@ export function GachaAdmin({ screen }: { screen: Screen }) {
         <Panel title="提供割合とバージョン">
           <Form
             submit="新バージョンとして保存"
-            onSubmit={() => {
+            onSubmit={async () => {
               if (
                 weights.some((w) => !Number.isFinite(w) || w < 0) ||
                 weights.reduce((a, b) => a + b, 0) !== 100
@@ -777,7 +777,7 @@ export function GachaAdmin({ screen }: { screen: Screen }) {
                 setError("提供割合の合計を厳密に100%にしてください");
                 return;
               }
-              update(
+              await update(
                 (d) => {
                   d.probabilityVersions.push({
                     version: d.probabilityVersion,
@@ -961,12 +961,12 @@ export function GachaAdmin({ screen }: { screen: Screen }) {
       />
       <Form
         submit="公開状態を変更"
-        onSubmit={(v) => {
+        onSubmit={async (v) => {
           if (probabilityTotal(state.probabilities) !== 100) {
             setError("提供割合が100%になっていません");
             return;
           }
-          update(
+          await update(
             (d) => {
               d.gacha.status = v.status;
             },

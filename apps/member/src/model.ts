@@ -19,6 +19,8 @@ export type Message = {
   time: string;
 };
 export type Audit = {
+  actor?: string;
+  ip?: string;
   id: string;
   action: string;
   target: string;
@@ -28,6 +30,8 @@ export type Audit = {
   at: string;
 };
 export type Draw = {
+  assetId?: string;
+  kind?: "photo" | "voice" | "frame";
   id: string;
   title: string;
   rarity: string;
@@ -36,6 +40,7 @@ export type Draw = {
   version: string;
 };
 export type DemoState = {
+  entitlements?: Record<string, boolean>;
   profile: {
     name: string;
     email: string;
@@ -159,7 +164,18 @@ export type DemoState = {
   reminders: string[];
   adminAuthenticated: boolean;
   support: { id: string; subject: string; body: string; status: string }[];
-  gacha: { title: string; status: string; start: string; end: string };
+  gacha: {
+    title: string;
+    status: string;
+    start: string;
+    end: string;
+    description?: string;
+    plan?: string;
+    ticketCost?: number;
+    maxBatch?: number;
+    dailyTickets?: number;
+    maxPerUser?: number;
+  };
 };
 export const seed: DemoState = {
   probabilityVersion: "preview-v1",
@@ -462,7 +478,9 @@ export const seed: DemoState = {
   },
 };
 export function probabilityTotal(items: DemoState["probabilities"]) {
-  return items.reduce((sum, item) => sum + item.weight, 0);
+  return (
+    items.reduce((sum, item) => sum + Math.round(item.weight * 100), 0) / 100
+  );
 }
 export function selectPrize(items: DemoState["probabilities"], random: number) {
   if (

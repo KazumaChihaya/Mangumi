@@ -28,7 +28,7 @@ const result = spawnSync(
   [cli, "export", "--platform", "web", "--output-dir", "dist-pages"],
   {
     cwd: member,
-    env: { ...process.env, EXPO_PUBLIC_BASE_PATH: basePath },
+    env: { ...process.env, EXPO_PUBLIC_BASE_PATH: basePath, EXPO_PUBLIC_API_URL: "" },
     stdio: "inherit",
   },
 );

@@ -6,6 +6,7 @@ import { safeLink } from "../model";
 import type { Screen } from "../registry";
 import {
   Badge,
+  Empty,
   Button,
   Field,
   Icon,
@@ -22,13 +23,19 @@ export function CalendarPage({
   screen: Screen;
   admin?: boolean;
 }) {
-  const { state, update, notify } = useStore();
+  const { state, update, notify, live } = useStore();
   const { item } = useLocalSearchParams<{ item?: string }>();
-  const [month, setMonth] = useState(9);
-  const [year, setYear] = useState(2026);
-  const [day, setDay] = useState(16);
+  const [month, setMonth] = useState(live ? new Date().getMonth() : 9);
+  const [year, setYear] = useState(live ? new Date().getFullYear() : 2026);
+  const [day, setDay] = useState(live ? new Date().getDate() : 16);
   const selected =
     state.schedules.find((s) => s.id === item) ?? state.schedules[0];
+  if (["U029", "U032", "U033"].includes(screen.id) && !selected)
+    return (
+      <Panel>
+        <Empty title="配信予定はありません" text="次回の配信をお楽しみに。" />
+      </Panel>
+    );
   if (screen.id === "U032")
     return (
       <>

@@ -23,6 +23,7 @@ import {
   downloadCSV,
 } from "../ui";
 import { Chart, ConfigForm } from "./Common";
+import { api, liveMode } from "../api";
 import { CalendarPage } from "../member/Calendar";
 export function AssetUpload({
   value,
@@ -75,7 +76,17 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
   const [error, setError] = useState("");
   const selected = state.schedules.find((s) => s.id === item);
   const first = selected ?? state.schedules[0];
-  const [image, setImage] = useState(first.image);
+  const [image, setImage] = useState(first?.image ?? "/assets/thumb_1.jpg");
+  if (!first && ["A028", "A029", "A030"].includes(screen.id))
+    return (
+      <Panel>
+        <Empty
+          title="配信予定を登録してください"
+          text="まだ予定が登録されていません。"
+          action={<Button id="A027">配信予定を作成</Button>}
+        />
+      </Panel>
+    );
   if (screen.id === "A026")
     return (
       <Panel title="運営カレンダー">
@@ -153,13 +164,13 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
     return (
       <Panel title={selected ? "配信予定を編集" : "配信予定を新規登録"}>
         <Form
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
             const link = safeLink(v.url);
             if (!link) {
               setError("配信URLはHTTPSの正しいURLを入力してください");
               return;
             }
-            update(
+            await update(
               (d) => {
                 const entry = {
                   id: selected?.id ?? crypto.randomUUID(),
@@ -270,9 +281,9 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
             options: ["個別回の変更を優先"],
           },
         ]}
-        onSave={(v) => {
+        onSave={async (v) => {
           const base = state.schedules.find((s) => s.title === v.schedule)!;
-          update(
+          await update(
             (d) => {
               for (let i = 1; i <= Number(v.count); i++) {
                 const date = new Date(`${base.date}T12:00:00Z`);
@@ -327,12 +338,15 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
   return (
     <Confirm
       title="予定変更のお知らせを送りますか？"
-      text={`${first.title}の変更案内をプレビューのお知らせ一覧に追加します。Pushの実配信は行いません。`}
+      text={liveMode ? `${first.title}の変更を、対象プランの会員へ通知します。通知設定とサイレント時間帯を尊重します。` : `${first.title}の変更案内をプレビューのお知らせ一覧に追加します。Pushの実配信は行いません。`}
       action="変更のお知らせを作成"
       reason
       back="A025"
-      onConfirm={(reason) => {
-        update(
+      onConfirm={async (reason) => {
+        if (liveMode) {
+          await api("/admin/notifications", { title: `配信予定変更：${first.title}`.slice(0, 100), body: reason.slice(0, 500), plan: first.plan }, "POST", "admin", crypto.randomUUID());
+        }
+        await update(
           (d) => {
             d.notices.unshift({
               id: crypto.randomUUID(),
@@ -515,8 +529,8 @@ export function NotificationsPage({ screen }: { screen: Screen }) {
         />
         <Button
           className="full"
-          onClick={() => {
-            update(
+          onClick={async () => {
+            await update(
               (d) => {
                 d.notices.unshift({
                   id: crypto.randomUUID(),
@@ -614,8 +628,8 @@ export function NotificationsPage({ screen }: { screen: Screen }) {
             key="delete"
             tone="ghost"
             className="small"
-            onClick={() => {
-              update(
+            onClick={async () => {
+              await update(
                 (d) => {
                   d.sessions = d.sessions.filter((x) => x.id !== s.id);
                 },
@@ -675,8 +689,8 @@ export function StoriesAdmin({ screen }: { screen: Screen }) {
       <Panel title="ストーリーを投稿">
         <Form
           submit="下書きを作成"
-          onSubmit={(v) => {
-            update(
+          onSubmit={async (v) => {
+            await update(
               (d) => {
                 d.stories.unshift({
                   id: crypto.randomUUID(),
@@ -772,8 +786,8 @@ export function StoriesAdmin({ screen }: { screen: Screen }) {
             <div className="button-row">
               <Button
                 tone="ghost"
-                onClick={() => {
-                  update(
+                onClick={async () => {
+                  await update(
                     (d) => {
                       d.stories.find((x) => x.id === s.id)!.status =
                         "アーカイブ";
@@ -788,8 +802,8 @@ export function StoriesAdmin({ screen }: { screen: Screen }) {
               </Button>
               <Button
                 tone="gold"
-                onClick={() => {
-                  update(
+                onClick={async () => {
+                  await update(
                     (d) => {
                       d.stories.find((x) => x.id === s.id)!.status = "公開";
                     },
@@ -956,8 +970,8 @@ export function RoomsAdmin({ screen }: { screen: Screen }) {
                 <Button
                   tone="ghost"
                   className="small"
-                  onClick={() => {
-                    update(
+                  onClick={async () => {
+                    await update(
                       (d) => {
                         d.records[`mute-${name}`] = {
                           muted:
@@ -986,8 +1000,8 @@ export function RoomsAdmin({ screen }: { screen: Screen }) {
           action="ルームを強制終了"
           reason
           back="A045"
-          onConfirm={(reason) => {
-            update(
+          onConfirm={async (reason) => {
+            await update(
               (d) => {
                 d.rooms.find((r) => r.id === room.id)!.status = "終了";
                 if (d.activeRoom === room.id) d.activeRoom = null;

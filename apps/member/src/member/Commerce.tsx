@@ -3,6 +3,7 @@ import { publicPath } from "../web-path";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { screenPath, type Screen } from "../registry";
 import { useStore } from "../store";
+import { api, liveMode } from "../api";
 import { validateTip, yen } from "../model";
 import { playCue } from "../sound";
 import {
@@ -38,7 +39,17 @@ export function Confetti() {
   );
 }
 export function GachaPage({ screen }: { screen: Screen }) {
-  const { state, draw, notify, sound, reduced } = useStore();
+  const { state, draw, notify, sound, reduced, refresh } = useStore();
+  const cost = state.gacha.ticketCost ?? 1;
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const available =
+    !liveMode ||
+    (state.gacha.status === "公開" &&
+      today >= state.gacha.start &&
+      today <= state.gacha.end &&
+      (!state.gacha.plan ||
+        state.gacha.plan === "Free" ||
+        state.gacha.plan === state.profile.plan));
   const router = useRouter();
   const { item } = useLocalSearchParams<{ item?: string }>();
   const [spinning, setSpinning] = useState(false);
@@ -85,7 +96,7 @@ export function GachaPage({ screen }: { screen: Screen }) {
   }, [confirm]);
   const start = (count: number) => {
     if (busy.current) return;
-    if (state.tickets < count) {
+    if (state.tickets < count * cost) {
       router.push(screenPath("U087") as Href);
       return;
     }
@@ -93,9 +104,9 @@ export function GachaPage({ screen }: { screen: Screen }) {
     setSpinning(true);
     playCue("spin", sound);
     timer.current = setTimeout(
-      () => {
+      async () => {
         try {
-          draw(count);
+          await draw(count);
           playCue("win", sound);
           router.push(screenPath(count === 1 ? "U082" : "U083") as Href);
         } catch (error) {
@@ -145,7 +156,8 @@ export function GachaPage({ screen }: { screen: Screen }) {
           <p className="preview-note">確率バージョン：preview-v1 / 合計100%</p>
         </Panel>
         <Notice>
-          各抽選は独立です。景品の換金、売買、譲渡はできません。この画面の抽選はUIの動作確認用です。
+          各抽選は独立です。景品の換金、売買、譲渡はできません。
+          {!liveMode && "この画面の抽選はUIの動作確認用です。"}
         </Notice>
         <Button id="U076" tone="gold">
           ガチャへ戻る
@@ -314,11 +326,44 @@ export function GachaPage({ screen }: { screen: Screen }) {
             <dt>確率バージョン</dt>
             <dd>{result.version}</dd>
             <dt>種別</dt>
-            <dd>デジタルコレクション（プレビュー）</dd>
+            <dd>
+              {liveMode
+                ? "デジタルコレクション"
+                : "デジタルコレクション（プレビュー）"}
+            </dd>
           </dl>
-          <Notice>
-            景品の実ファイルは運営が登録したコンテンツへ接続して提供します。
-          </Notice>
+          {liveMode && result.assetId && (
+            <Button
+              onClick={async () => {
+                const file = await api(`/media/${result.assetId}/url`, {});
+                window.location.assign(file.url);
+              }}
+            >
+              獲得した景品ファイルを開く
+            </Button>
+          )}
+          {liveMode && result.kind === "frame" && result.assetId && (
+            <Button
+              onClick={async () => {
+                await api(
+                  "/me/frame",
+                  { drawId: result.id },
+                  "POST",
+                  "member",
+                  crypto.randomUUID(),
+                );
+                await refresh();
+                notify("プロフィールにフレームを設定しました");
+              }}
+            >
+              プロフィールにフレームを設定
+            </Button>
+          )}
+          {!liveMode && (
+            <Notice>
+              景品の実ファイルは運営が登録したコンテンツへ接続して提供します。
+            </Notice>
+          )}
         </Panel>
         <Button id="U084" tone="ghost">
           コレクションへ戻る
@@ -369,12 +414,12 @@ export function GachaPage({ screen }: { screen: Screen }) {
       <Panel className="confirmation">
         <Empty
           icon="ticket"
-          title="チケットを1枚使いますか？"
+          title={`チケットを${cost}枚使いますか？`}
           text={`残り${state.tickets}枚。無料チケットで1回抽選します。`}
         />
         <Button
           className="full"
-          disabled={spinning || state.tickets < 1}
+          disabled={!available || spinning || state.tickets < cost}
           onClick={() => start(1)}
         >
           {spinning ? "抽選中…" : "確認してガチャを引く"}
@@ -406,6 +451,29 @@ export function GachaPage({ screen }: { screen: Screen }) {
         </p>
       </div>
       <Panel>
+        {!available && (
+          <Notice>
+            現在、このプランで参加できるガチャは開催されていません。
+          </Notice>
+        )}
+        {state.gacha.description && <p>{state.gacha.description}</p>}
+        {liveMode && available && !!state.gacha.dailyTickets && (
+          <Button
+            onClick={async () => {
+              await api(
+                "/gacha/daily-tickets",
+                {},
+                "POST",
+                "member",
+                crypto.randomUUID(),
+              );
+              await refresh();
+              notify("本日の無料チケットを受け取りました");
+            }}
+          >
+            本日の無料チケットを受け取る · {state.gacha.dailyTickets}枚
+          </Button>
+        )}
         <div className="ticket-balance">
           <Icon name="ticket" size={25} />
           <span>無料チケット</span>
@@ -415,16 +483,21 @@ export function GachaPage({ screen }: { screen: Screen }) {
         <div className="button-row">
           <Button
             tone="gold"
-            disabled={spinning || state.tickets < 1}
+            disabled={!available || spinning || state.tickets < cost}
             onClick={() => setConfirm(1)}
           >
-            {spinning ? "抽選中…" : "1回引く · 1枚"}
+            {spinning ? "抽選中…" : `1回引く · ${cost}枚`}
           </Button>
           <Button
-            disabled={spinning || state.tickets < 5}
+            disabled={
+              !available ||
+              spinning ||
+              state.tickets < 5 * cost ||
+              (state.gacha.maxBatch ?? 10) < 5
+            }
             onClick={() => setConfirm(5)}
           >
-            5回引く · 5枚
+            5回引く · {5 * cost}枚
           </Button>
         </div>
         {confirm > 0 && (
@@ -436,7 +509,7 @@ export function GachaPage({ screen }: { screen: Screen }) {
             aria-label="チケット使用確認"
             style={{ marginTop: 16 }}
           >
-            <p>無料チケットを{confirm}枚使って抽選します。</p>
+            <p>無料チケットを{confirm * cost}枚使って抽選します。</p>
             <div className="button-row" style={{ marginTop: 12 }}>
               <Button
                 tone="ghost"
@@ -456,7 +529,9 @@ export function GachaPage({ screen }: { screen: Screen }) {
           </div>
         )}
         <small className="preview-note">
-          動作確認用の抽選です。実際の景品は付与されません。
+          {liveMode
+            ? "獲得した景品はコレクションから確認できます。"
+            : "動作確認用の抽選です。実際の景品は付与されません。"}
         </small>
       </Panel>
       <div className="button-row">
@@ -512,8 +587,8 @@ export function TipPage({ screen }: { screen: Screen }) {
                 borderRight: 0,
                 textAlign: "left",
               }}
-              onClick={() => {
-                update((d) => {
+              onClick={async () => {
+                await update((d) => {
                   d.tipRecipient = name;
                 });
                 go("U065");
@@ -598,8 +673,8 @@ export function TipPage({ screen }: { screen: Screen }) {
           <Notice>決済事業者は未接続です。実カードは登録できません。</Notice>
           <Button
             className="full"
-            onClick={() => {
-              update((d) => {
+            onClick={async () => {
+              await update((d) => {
                 d.paymentMethod = true;
               });
               notify("テスト用の支払方法を追加しました");
@@ -612,8 +687,8 @@ export function TipPage({ screen }: { screen: Screen }) {
             <Button
               className="full"
               tone="danger"
-              onClick={() => {
-                update((d) => {
+              onClick={async () => {
+                await update((d) => {
                   d.paymentMethod = false;
                 });
                 notify("テスト用支払方法を削除しました");
@@ -683,13 +758,13 @@ export function TipPage({ screen }: { screen: Screen }) {
           text="本番では署名検証済みWebhookで決済を確定します。このプレビューではテスト結果を作成できます。"
           action={
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (!validateTip(state.tipAmount, state.settings.tipMax)) {
                   notify("応援金額を確認してください");
                   go("U065");
                   return;
                 }
-                update(
+                await update(
                   (d) => {
                     d.tips.unshift({
                       id: crypto.randomUUID(),
@@ -783,8 +858,8 @@ export function TipPage({ screen }: { screen: Screen }) {
               key={amount}
               disabled={amount > state.settings.tipMax}
               className={state.tipAmount === amount ? "active" : ""}
-              onClick={() => {
-                update((d) => {
+              onClick={async () => {
+                await update((d) => {
                   d.tipAmount = amount;
                 });
                 setError("");

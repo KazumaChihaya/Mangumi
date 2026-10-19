@@ -25,6 +25,15 @@ export function HomePage({ screen }: { screen: Screen }) {
   const { state, update, notify } = useStore();
   const { item } = useLocalSearchParams<{ item?: string }>();
   const notice = state.notices.find((n) => n.id === item) ?? state.notices[0];
+  if (["U024", "U026"].includes(screen.id) && !notice)
+    return (
+      <Panel>
+        <Empty
+          title="お知らせはありません"
+          text="新しいお知らせはこちらに表示します。"
+        />
+      </Panel>
+    );
   if (["U024", "U026"].includes(screen.id))
     return (
       <>
@@ -53,8 +62,8 @@ export function HomePage({ screen }: { screen: Screen }) {
             screen.id === "U025" && (
               <button
                 className="button ghost small"
-                onClick={() => {
-                  update((d) => {
+                onClick={async () => {
+                  await update((d) => {
                     d.notices.forEach((n) => {
                       n.read = true;
                     });
@@ -309,12 +318,12 @@ export function AuthPage({ screen }: { screen: Screen }) {
         <Panel title="マン組の仲間になろう">
           <Form
             submit="無料で会員登録"
-            onSubmit={(v) => {
+            onSubmit={async (v) => {
               if (v.name.trim().length < 2 || v.name.trim().length > 30) {
                 setError("ニックネームは2〜30文字にしてください");
                 return;
               }
-              update((d) => {
+              await update((d) => {
                 d.profile = {
                   ...d.profile,
                   name: v.name.trim(),
@@ -414,8 +423,8 @@ export function AuthPage({ screen }: { screen: Screen }) {
           <Button
             className="full"
             tone="gold"
-            onClick={() => {
-              update((d) => {
+            onClick={async () => {
+              await update((d) => {
                 d.profile.verified = true;
                 d.profile.signedIn = true;
               });
@@ -448,8 +457,8 @@ export function AuthPage({ screen }: { screen: Screen }) {
             action={
               <Button
                 tone="gold"
-                onClick={() => {
-                  update((d) => {
+                onClick={async () => {
+                  await update((d) => {
                     d.profile.verified = true;
                     d.profile.signedIn = true;
                   });
@@ -474,8 +483,8 @@ export function AuthPage({ screen }: { screen: Screen }) {
         <Panel title="ログイン">
           <Form
             submit="プレビューでログイン"
-            onSubmit={(v) => {
-              update((d) => {
+            onSubmit={async (v) => {
+              await update((d) => {
                 d.profile.email = v.email;
                 d.profile.signedIn = true;
               });
@@ -538,8 +547,8 @@ export function AuthPage({ screen }: { screen: Screen }) {
       <Panel title="メールアドレスを変更">
         <Form
           submit="変更内容を確認"
-          onSubmit={(v) => {
-            update((d) => {
+          onSubmit={async (v) => {
+            await update((d) => {
               d.profile.email = v.email;
               d.profile.verified = false;
             });
@@ -609,7 +618,7 @@ export function AuthPage({ screen }: { screen: Screen }) {
               }
               const permission = await Notification.requestPermission();
               if (permission === "granted") {
-                update((d) => {
+                await update((d) => {
                   d.settings.notifySchedule = true;
                 });
                 notify("通知を許可しました。配信接続は今後設定します");

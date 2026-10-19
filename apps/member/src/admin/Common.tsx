@@ -51,8 +51,8 @@ export function ConfigForm({
     <Panel title={screen.title}>
       <Form
         submit={submit}
-        onSubmit={(values) => {
-          update(
+        onSubmit={async (values) => {
+          await update(
             (d) => {
               d.records[screen.id] = values;
             },
@@ -60,7 +60,7 @@ export function ConfigForm({
             screen.section,
             values.reason || "設定変更",
           );
-          onSave?.(values);
+          await onSave?.(values);
           notify("設定を保存しました");
         }}
       >
@@ -147,8 +147,8 @@ export function AdminAuth({ screen }: { screen: Screen }) {
         action="操作を確定"
         reason
         back="A008"
-        onConfirm={(reason) => {
-          update(
+        onConfirm={async (reason) => {
+          await update(
             (d) => {
               d.records.A006 = { reason, status: "確定" };
             },
@@ -228,8 +228,8 @@ export function AdminAuth({ screen }: { screen: Screen }) {
           />
           <Button
             tone="danger"
-            onClick={() => {
-              update((d) => {
+            onClick={async () => {
+              await update((d) => {
                 d.adminAuthenticated = false;
               });
               go("A001");
@@ -245,12 +245,12 @@ export function AdminAuth({ screen }: { screen: Screen }) {
       <Panel title="二要素認証">
         <Form
           submit="認証をプレビュー"
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
             if (!/^\d{6}$/.test(v.code)) {
               setError("6桁の数字を入力してください");
               return;
             }
-            update((d) => {
+            await update((d) => {
               d.adminAuthenticated = true;
             });
             notify("管理者セッションのプレビューを開始しました");

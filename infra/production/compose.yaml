@@ -1,0 +1,62 @@
+name: mangumi
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [web]
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/production/Dockerfile
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: https://${APP_DOMAIN:?Set APP_DOMAIN}
+      DATABASE_URL: mysql://mangumi:${MARIADB_PASSWORD:?Use a URL-safe generated password}@db:3306/mangumi
+      WEB_ROOT: /app/apps/member/dist-live
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [web, database]
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: mangumi
+      MARIADB_USER: mangumi
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    networks: [database]
+networks:
+  web:
+  database:
+    internal: true
+volumes:
+  database:
+  uploads:
+  caddy_data:
+  caddy_config:

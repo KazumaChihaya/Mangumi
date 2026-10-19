@@ -1,6 +1,7 @@
 import React from "react";
 import { useStore } from "../store";
 import { publicPath } from "../web-path";
+import { liveMode } from "../api";
 import { Badge, Button, Icon, Notice, Panel, RouteLink, Row } from "../ui";
 
 export function HomeShowcase({ freeOnly }: { freeOnly: boolean }) {
@@ -102,6 +103,9 @@ export function HomeShowcase({ freeOnly }: { freeOnly: boolean }) {
           </Panel>
         )}
         <Panel title="最新ストーリー">
+          {liveMode && !state.stories.length && (
+            <p>新しいストーリーの公開をお楽しみに。</p>
+          )}
           <div className="story-strip">
             {state.stories
               .filter((story) => story.status === "公開")
@@ -112,14 +116,32 @@ export function HomeShowcase({ freeOnly }: { freeOnly: boolean }) {
                   item={story.id}
                   className={`story-avatar ${story.viewed ? "viewed" : ""}`}
                 >
-                  <img src={publicPath(story.image)} alt={story.title} />
+                  {(story as any).mediaType === "video" ? (
+                    <video
+                      src={publicPath(story.image)}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      aria-label={story.title}
+                      style={{
+                        width: 60,
+                        height: 60,
+                        objectFit: "cover",
+                        borderRadius: "50%",
+                      }}
+                    />
+                  ) : (
+                    <img src={publicPath(story.image)} alt={story.title} />
+                  )}
                   <span>{story.title.slice(0, 8)}</span>
                 </RouteLink>
               ))}
-            <RouteLink id="U037" className="story-avatar">
-              <img src={publicPath("/assets/avatar.jpg")} alt="ハイライト" />
-              <span>ハイライト</span>
-            </RouteLink>
+            {!liveMode && (
+              <RouteLink id="U037" className="story-avatar">
+                <img src={publicPath("/assets/avatar.jpg")} alt="ハイライト" />
+                <span>ハイライト</span>
+              </RouteLink>
+            )}
           </div>
           <Button id="U034" tone="ghost">
             ストーリーを見る

@@ -1,0 +1,54 @@
+name: Verify server and connected application
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: mangumi-ci-tests-only
+          MARIADB_DATABASE: mangumi_test
+        ports: ["58468:3306"]
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm typecheck:api && pnpm test && pnpm test:api
+      - run: pnpm test:api
+        env:
+          MANGUMI_TEST_DATABASE_URL: mysql://root:mangumi-ci-tests-only@127.0.0.1:58468/mangumi_test
+      - run: pnpm build:live
+      - run: pnpm --filter @mangumi/member exec playwright install --with-deps chromium
+      - name: Start isolated voice server
+        env:
+          LIVEKIT_CONFIG: |
+            port: 17880
+            rtc:
+              tcp_port: 17881
+              udp_port: 17882
+              use_external_ip: false
+            keys:
+              mangumitest: mangumi-local-test-secret-only-20261020-42
+        run: docker run --detach --rm --name mangumi-voice-ci --network host -e LIVEKIT_CONFIG livekit/livekit-server@sha256:89ca9ce0791e18d6e03bf6e2c49ceb27e1c754eae8bd50c989386c1a5963791a --config-body "$LIVEKIT_CONFIG" --node-ip 127.0.0.1 --bind 0.0.0.0
+      - run: pnpm test:live
+        env:
+          MANGUMI_TEST_LIVEKIT_URL: ws://127.0.0.1:17880
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connected-app-failures
+          path: apps/member/test-results-live
+      - if: always()
+        run: docker stop mangumi-voice-ci || true

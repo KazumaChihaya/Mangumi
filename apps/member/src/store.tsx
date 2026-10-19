@@ -7,6 +7,14 @@ import React, {
 } from "react";
 import { seed, type DemoState, type Draw, selectPrize } from "./model";
 import { playCue, type Cue } from "./sound";
+import {
+  api,
+  liveMode,
+  session,
+  stateChanges,
+  upload,
+  currentArea,
+} from "./api";
 type Store = {
   state: DemoState;
   update: (
@@ -14,14 +22,20 @@ type Store = {
     action?: string,
     target?: string,
     reason?: string,
-  ) => void;
+  ) => Promise<void>;
+  live: boolean;
+  loading: boolean;
+  connectionError: string;
+  role: string;
+  userId: string | null;
+  refresh: () => Promise<void>;
   toast: string;
   notify: (text: string, cue?: Cue) => void;
   sound: boolean;
   toggleSound: () => void;
   reduced: boolean;
   toggleMotion: () => void;
-  draw: (count: number) => Draw[];
+  draw: (count: number) => Promise<Draw[]>;
   reset: () => void;
 };
 const Context = createContext<Store | null>(null);
@@ -29,13 +43,54 @@ const fresh = () => structuredClone(seed);
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<DemoState>(fresh);
   const ref = useRef(state);
+  const [loading, setLoading] = useState(liveMode);
+  const [connectionError, setConnectionError] = useState("");
+  const [role, setRole] = useState("guest");
+  const [userId, setUserId] = useState<string | null>(null);
+  const pending = useRef<Promise<unknown>>(Promise.resolve());
+  function accept(next: DemoState) {
+    const current = ref.current;
+    const merged = {
+      ...next,
+      tipAmount: current.tipAmount,
+      tipMessage: current.tipMessage,
+      tipRecipient: current.tipRecipient,
+      activeRoom: current.activeRoom,
+      speaking: current.speaking,
+      muted: current.muted,
+    };
+    ref.current = merged;
+    setState(merged);
+  }
+  async function refresh() {
+    if (!liveMode) return;
+    try {
+      await session().catch(() => undefined);
+      const result = await api<{
+        state: DemoState;
+        role: string;
+        userId: string | null;
+      }>("/state");
+      accept(result.state);
+      setRole(result.role);
+      setUserId(result.userId);
+      setConnectionError("");
+    } catch (error) {
+      setConnectionError(
+        error instanceof Error ? error.message : "接続できませんでした",
+      );
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }
   const [toast, setToast] = useState("");
   const [sound, setSound] = useState(false);
   const [reduced, setReduced] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem("mangumi-ui-v1");
+      const saved = liveMode ? null : sessionStorage.getItem("mangumi-ui-v1");
       if (saved) {
         const next = JSON.parse(saved) as DemoState;
         if (next.profile && next.settings && next.probabilities && next.gacha) {
@@ -56,6 +111,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
   useEffect(() => {
+    if (!liveMode) return;
+    void refresh().catch(() => {});
+    const onFocus = () => {
+      void pending.current.then(() => refresh()).catch(() => {});
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+  useEffect(() => {
     if (typeof document !== "undefined")
       document.documentElement.dataset.motion = reduced ? "reduced" : "full";
   }, [reduced]);
@@ -65,12 +129,68 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setToast(""), 3400);
   }
-  function update(
+  async function update(
     fn: (draft: DemoState) => void,
     action?: string,
     target = "設定",
     reason = "UIプレビュー操作",
   ) {
+    if (liveMode) {
+      const task = pending.current
+        .catch(() => {})
+        .then(async () => {
+          const previous = ref.current;
+          const draft = structuredClone(previous);
+          fn(draft);
+          const images = new Map<string, string>();
+          async function normalize(value: any): Promise<any> {
+            if (
+              typeof value === "string" &&
+              /^data:image\/(jpeg|png|webp);base64,/.test(value)
+            ) {
+              if (!images.has(value))
+                images.set(
+                  value,
+                  (
+                    await upload(
+                      await (await fetch(value)).blob(),
+                      currentArea() === "admin" ? "image" : "avatar",
+                    )
+                  ).url,
+                );
+              return images.get(value);
+            }
+            if (Array.isArray(value)) return Promise.all(value.map(normalize));
+            if (value && typeof value === "object") {
+              for (const key of Object.keys(value))
+                value[key] = await normalize(value[key]);
+            }
+            return value;
+          }
+          await normalize(draft);
+          const changes = stateChanges(previous, draft);
+          if (!changes.length) {
+            ref.current = draft;
+            setState(draft);
+            return;
+          }
+          const result = await api<{ state: DemoState }>(
+            "/commands",
+            {
+              changes,
+              action: action ?? "利用者設定変更",
+              reason:
+                reason === "UIプレビュー操作" ? "利用者による操作" : reason,
+            },
+            "POST",
+            undefined,
+            crypto.randomUUID(),
+          );
+          accept(result.state);
+        });
+      pending.current = task;
+      return task;
+    }
     const previous = ref.current;
     const draft = structuredClone(previous);
     fn(draft);
@@ -103,7 +223,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       /* Session can continue without persistence. */
     }
   }
-  function draw(count: number) {
+  async function draw(count: number) {
+    if (liveMode) {
+      const response = await api<{ results: Draw[]; balance: number }>(
+        "/gacha/draw",
+        { count },
+        "POST",
+        "member",
+        crypto.randomUUID(),
+      );
+      await refresh();
+      return response.results;
+    }
     const current = ref.current;
     if (
       !Number.isInteger(count) ||
@@ -124,7 +255,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         version: current.probabilityVersion,
       };
     });
-    update(
+    await update(
       (draft) => {
         draft.tickets -= count;
         draft.draws.unshift(...results);
@@ -135,6 +266,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return results;
   }
   const value: Store = {
+    live: liveMode,
+    loading,
+    connectionError,
+    role,
+    userId,
+    refresh,
     state,
     update,
     toast,

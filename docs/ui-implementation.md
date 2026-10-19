@@ -1,5 +1,7 @@
 # UI実装メモ
 
+この文書はGitHub Pagesで提供するサンプルデータのUIプレビューについての記録です。API接続版の実装・設定・残作業は[サーバー実装と配置](server-setup.md)を参照してください。
+
 ## 構成と見た目の資料
 
 - [UI案.zip](https://drive.google.com/file/d/1F6FH1T42dp3oL4U3JKUlOfizMGddTNDJ/view)：画面構成・サイトマップの根拠。

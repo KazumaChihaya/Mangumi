@@ -19,6 +19,19 @@ import { ModerationPage, PaymentsAdmin, GachaAdmin } from "./admin/Operations";
 import { BrandPage, SystemsPage, AdministratorsPage } from "./admin/Settings";
 import { Button } from "./ui";
 import { publicPath } from "./web-path";
+import { liveMode } from "./api";
+import { LiveAuth } from "./live/Auth";
+import { Panel, Notice } from "./ui";
+import { LiveDM } from "./live/Social";
+import { LiveVoice } from "./live/Voice";
+import { LiveAccount, LivePayments } from "./live/Account";
+import { LiveAdmin, LiveBrand, adminScreenAllowed } from "./live/Admin";
+import { LiveStoriesAdmin, LiveGachaAdmin } from "./live/Content";
+import { LivePlansAdmin } from "./live/Plans";
+import { LiveLegal } from "./live/Legal";
+import { LiveStories } from "./live/Stories";
+import { features, type Feature } from "./features";
+import { LiveMembers } from "./live/Members";
 export const renderers = [
   { area: "U", from: 1, to: 8, component: IntroPage },
   { area: "U", from: 9, to: 21, component: AuthPage },
@@ -54,13 +67,17 @@ export function rendererFor(id: string) {
   );
 }
 export default function ScreenPage({ id }: { id: string }) {
-  const { state, notify } = useStore();
+  const { state, notify, loading, connectionError, refresh, role } = useStore();
   const screen = byId[id];
   const renderer = rendererFor(id);
   useEffect(() => {
     if (screen) document.title = `${screen.title} | ${state.settings.name}`;
   }, [id, state.settings.name]);
   useEffect(() => {
+    if (liveMode) void refresh().catch(() => {});
+  }, [screen?.area]);
+  useEffect(() => {
+    if (liveMode) return;
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker
       .register(publicPath("/sw.js"))
@@ -91,6 +108,187 @@ export default function ScreenPage({ id }: { id: string }) {
       </div>
     );
   const Component = renderer.component;
+  if (liveMode) {
+    const number = Number(id.slice(1));
+    if (loading || connectionError)
+      return (
+        <div className="app-background">
+          <div className="member-app">
+            <Panel>
+              <h1>{loading ? "読み込み中…" : "接続できませんでした"}</h1>
+              {connectionError && <Notice>{connectionError}</Notice>}
+              <Button onClick={refresh}>再試行</Button>
+            </Panel>
+          </div>
+        </div>
+      );
+    const authPage =
+      (screen.area === "member" && number >= 9 && number <= 21) ||
+      (screen.area === "admin" && number <= 5);
+    const protectedPage =
+      screen.area === "admin"
+        ? !state.adminAuthenticated
+        : number >= 22 &&
+          number <= 102 &&
+          (!state.profile.signedIn || !state.profile.verified);
+    if (["U003", "U004"].includes(id))
+      return (
+        <Shell screen={screen}>
+          <LiveLegal privacy={id === "U004"} />
+        </Shell>
+      );
+    if (authPage || protectedPage) {
+      const auth = authPage
+        ? screen
+        : byId[
+            screen.area === "admin"
+              ? "A001"
+              : state.profile.signedIn
+                ? "U014"
+                : "U012"
+          ];
+      return (
+        <Shell screen={screen}>
+          <LiveAuth key={auth.id} screen={auth} />
+        </Shell>
+      );
+    }
+    if (screen.area === "admin" && !adminScreenAllowed(screen, role))
+      return (
+        <Shell screen={screen}>
+          <LiveAuth screen={byId.A005} />
+        </Shell>
+      );
+    const feature: Feature | undefined =
+      screen.area !== "member"
+        ? undefined
+        : number >= 28 && number <= 33
+          ? "calendar.view"
+          : number >= 34 && number <= 40
+            ? "story.view"
+            : number >= 41 && number <= 54
+              ? "voice.join"
+              : number >= 55 && number <= 64
+                ? "dm.send"
+                : number >= 76 && number <= 83
+                  ? "gacha.draw"
+                  : undefined;
+    if (feature && state.entitlements?.[feature] === false)
+      return (
+        <Shell screen={screen}>
+          <Panel title={`${features[feature]}の利用にはプランが必要です`}>
+            <p>現在のプランでは、この機能を利用できません。</p>
+            <Button id="U089">プランを確認する</Button>
+          </Panel>
+        </Shell>
+      );
+    if (
+      screen.area === "member" &&
+      number >= 22 &&
+      number <= 87 &&
+      state.settings.maintenance
+    )
+      return (
+        <Shell screen={screen}>
+          <Panel title="メンテナンス中です">
+            <p>{state.settings.maintenanceText}</p>
+            <Button onClick={refresh}>もう一度確認する</Button>
+          </Panel>
+        </Shell>
+      );
+    if (screen.area === "admin" && number >= 18 && number <= 24)
+      return (
+        <Shell screen={screen}>
+          <LivePlansAdmin key={id} />
+        </Shell>
+      );
+    if (screen.area === "admin" && number >= 11 && number <= 17)
+      return (
+        <Shell screen={screen}>
+          <LiveMembers key={id} screen={screen} />
+        </Shell>
+      );
+    if (screen.area === "admin" && number >= 40 && number <= 44)
+      return (
+        <Shell screen={screen}>
+          <LiveStoriesAdmin key={id} />
+        </Shell>
+      );
+    if (
+      screen.area === "admin" &&
+      number >= 67 &&
+      number <= 74 &&
+      number !== 73
+    )
+      return (
+        <Shell screen={screen}>
+          <LiveGachaAdmin key={id} />
+        </Shell>
+      );
+    if (
+      screen.area === "admin" &&
+      ((number >= 8 && number <= 10) ||
+        (number >= 32 && number <= 39) ||
+        (number >= 45 && number <= 66) ||
+        number === 73 ||
+        (number >= 82 && number <= 93))
+    )
+      return (
+        <Shell screen={screen}>
+          <LiveAdmin key={id} screen={screen} />
+        </Shell>
+      );
+    if (screen.area === "admin" && number >= 75 && number <= 81)
+      return (
+        <Shell screen={screen}>
+          <LiveBrand key={id} />
+        </Shell>
+      );
+    if (screen.area === "member" && number >= 34 && number <= 40)
+      return (
+        <Shell screen={screen}>
+          <LiveStories key={id} screen={screen} />
+        </Shell>
+      );
+    if (id[0] === "U" && number >= 55 && number <= 64)
+      return (
+        <Shell screen={screen}>
+          <LiveDM key={id} screen={screen} />
+        </Shell>
+      );
+    if (id[0] === "U" && number >= 41 && number <= 54)
+      return (
+        <Shell screen={screen}>
+          <LiveVoice key={id} screen={screen} />
+        </Shell>
+      );
+    if (id[0] === "U" && number >= 65 && number <= 75)
+      return (
+        <Shell screen={screen}>
+          <LivePayments key={id} screen={screen} />
+        </Shell>
+      );
+    if (
+      [
+        "U089",
+        "U090",
+        "U094",
+        "U095",
+        "U096",
+        "U097",
+        "U098",
+        "U099",
+        "U100",
+        "U101",
+        "U102",
+      ].includes(id)
+    )
+      return (
+        <Shell screen={screen}>
+          <LiveAccount key={id} screen={screen} />
+        </Shell>
+      );
+  }
   return (
     <Shell screen={screen}>
       <Component key={id} screen={screen} />

@@ -171,9 +171,9 @@ export function MembersPage({ screen }: { screen: Screen }) {
           { name: "date", label: "予約日時", type: "datetime-local" },
           { name: "reason", label: "変更理由", required: true },
         ]}
-        onSave={(v) => {
+        onSave={async (v) => {
           if (v.apply === "即時")
-            update(
+            await update(
               (d) => {
                 d.members.find((m) => m.id === member.id)!.plan = v.plan;
               },
@@ -237,8 +237,8 @@ export function MembersPage({ screen }: { screen: Screen }) {
         <Form
           submit="措置を確定"
           tone="danger"
-          onSubmit={(v) => {
-            update(
+          onSubmit={async (v) => {
+            await update(
               (d) => {
                 d.members.find((m) => m.id === member.id)!.status = v.action;
               },
@@ -272,8 +272,8 @@ export function MembersPage({ screen }: { screen: Screen }) {
         action="セッションを失効"
         reason
         back="A011"
-        onConfirm={(reason) => {
-          update(
+        onConfirm={async (reason) => {
+          await update(
             (d) => {
               d.records[`session-${member.id}`] = { status: "失効", reason };
             },
@@ -359,7 +359,7 @@ export function PlansPage({ screen }: { screen: Screen }) {
     return (
       <Panel title="新しいプラン">
         <Form
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
             if (
               state.plans.some(
                 (p) => p.name.toLowerCase() === v.name.toLowerCase(),
@@ -368,7 +368,7 @@ export function PlansPage({ screen }: { screen: Screen }) {
               setError("同じ名前のプランが存在します");
               return;
             }
-            update(
+            await update(
               (d) => {
                 d.plans.push({
                   id: crypto.randomUUID(),
@@ -527,8 +527,8 @@ export function PlansPage({ screen }: { screen: Screen }) {
         {state.plans.map((p) => (
           <Panel key={p.id} title={p.name}>
             <Form
-              onSubmit={(v) => {
-                update(
+              onSubmit={async (v) => {
+                await update(
                   (d) => {
                     const plan = d.plans.find((x) => x.id === p.id)!;
                     plan.price = p.name === "Free" ? 0 : Number(v.price);

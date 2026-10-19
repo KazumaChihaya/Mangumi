@@ -2,9 +2,11 @@ node_modules/
 .expo/
 dist/
 dist-pages/
+dist-live/
 coverage/
 test-results/
 test-results-pages/
+test-results-live/
 playwright-report/
 .local/
 .env

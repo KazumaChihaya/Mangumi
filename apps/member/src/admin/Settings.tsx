@@ -88,8 +88,8 @@ export function BrandPage({ screen }: { screen: Screen }) {
     return (
       <Panel title="ブランド素材">
         <Form
-          onSubmit={() => {
-            update((d) => {
+          onSubmit={async () => {
+            await update((d) => {
               d.records.A076 = { logo, icon };
             }, "ブランド素材変更");
             notify("ブランド素材のプレビューを保存しました");
@@ -151,8 +151,8 @@ export function BrandPage({ screen }: { screen: Screen }) {
     return (
       <Panel title="共有・通知素材">
         <Form
-          onSubmit={(v) => {
-            update((d) => {
+          onSubmit={async (v) => {
+            await update((d) => {
               d.records.A078 = { ...v, image };
             }, "OGP素材変更");
             notify("共有素材の設定を保存しました");
@@ -266,13 +266,13 @@ export function BrandPage({ screen }: { screen: Screen }) {
   return (
     <Panel title="法務文書のリンク">
       <Form
-        onSubmit={(v) => {
+        onSubmit={async (v) => {
           for (const value of Object.values(v))
             if (value && !safeLink(value)) {
               setError("HTTPSの正しいURLを入力してください");
               return;
             }
-          update((d) => {
+          await update((d) => {
             d.records.A081 = v;
           }, "法務文書リンク変更");
           setError("");
@@ -510,8 +510,8 @@ export function SystemsPage({ screen }: { screen: Screen }) {
             }
           />
           <Form
-            onSubmit={(v) => {
-              update((d) => {
+            onSubmit={async (v) => {
+              await update((d) => {
                 d.settings.maintenanceText = v.body;
               }, "メンテナンス文言変更");
               notify("表示文を保存しました");
@@ -546,8 +546,8 @@ export function SystemsPage({ screen }: { screen: Screen }) {
                 key="retry"
                 tone="ghost"
                 className="small"
-                onClick={() => {
-                  update(
+                onClick={async () => {
+                  await update(
                     (d) => {
                       const entry = d.campaigns.find((x) => x.id === c.id)!;
                       entry.status = "テスト再試行済み";
@@ -703,8 +703,8 @@ export function AdministratorsPage({ screen }: { screen: Screen }) {
                 tone="ghost"
                 className="small"
                 disabled={a.id === "a1"}
-                onClick={() => {
-                  update(
+                onClick={async () => {
+                  await update(
                     (d) => {
                       d.admins.find((x) => x.id === a.id)!.status = "無効";
                     },
@@ -861,7 +861,7 @@ export function AdministratorsPage({ screen }: { screen: Screen }) {
               )
               .map((a) => [
                 new Date(a.at).toLocaleString("ja-JP"),
-                "運営管理者（プレビュー）",
+                a.actor ?? "運営管理者（プレビュー）",
                 a.action,
                 a.target,
                 a.reason,
@@ -894,7 +894,8 @@ export function AdministratorsPage({ screen }: { screen: Screen }) {
               <dt>日時</dt>
               <dd>{new Date(audit.at).toLocaleString("ja-JP")}</dd>
               <dt>操作者</dt>
-              <dd>運営管理者（プレビュー）</dd>
+              <dd>{audit.actor ?? "運営管理者（プレビュー）"}</dd>
+              {audit.ip && <><dt>IPアドレス</dt><dd>{audit.ip}</dd></>}
             </dl>
             <div className="two-columns">
               <Panel title="変更前">

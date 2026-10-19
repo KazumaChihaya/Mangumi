@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { publicPath } from "./web-path";
 import { useStore } from "./store";
+import { useVoice } from "./live/Voice";
+import { adminScreenAllowed } from "./live/Admin";
+import { LivePwa } from "./live/Pwa";
+import { api } from "./api";
 import { Icon, RouteLink, SoundControls, Badge } from "./ui";
 import {
   screens,
@@ -41,7 +45,9 @@ export function Shell({
   screen: Screen;
   children: React.ReactNode;
 }) {
-  const { state, toast, reduced, update } = useStore();
+  const { state, toast, reduced, update, refresh } = useStore();
+  const voice = useVoice();
+  const { live, role } = useStore();
   const [menu, setMenu] = useState(false);
   const admin = screen.area === "admin";
   const related = sectionScreens(screen);
@@ -69,13 +75,20 @@ export function Shell({
       <div className="preview-bar">
         <span>
           <i />
-          UIプレビュー <small>サンプルデータ</small>
+          {live ? "まんぞうラブ" : "UIプレビュー"}{" "}
+          <small>{live ? "マン組 公式アプリ" : "サンプルデータ"}</small>
         </span>
         <div>
-          <a href={publicPath("/screens")}>全画面</a>
-          <RouteLink id={admin ? "U022" : "A008"}>
-            {admin ? "アプリへ" : "管理画面"}
-          </RouteLink>
+          {!live && <a href={publicPath("/screens")}>全画面</a>}
+          {(!live ||
+            admin ||
+            ["super", "content", "moderator", "support", "finance"].includes(
+              role,
+            )) && (
+            <RouteLink id={admin ? "U022" : "A008"}>
+              {admin ? "アプリへ" : "管理画面"}
+            </RouteLink>
+          )}
         </div>
       </div>
       {admin ? (
@@ -103,6 +116,14 @@ export function Shell({
                     (item) => item.section === section && item.area === "admin",
                   )!;
                   const id = section === "ダッシュボード" ? "A008" : first.id;
+                  if (
+                    live &&
+                    !adminScreenAllowed(
+                      screens.find((item) => item.id === id)!,
+                      role,
+                    )
+                  )
+                    return null;
                   return (
                     <RouteLink
                       key={section}
@@ -120,12 +141,31 @@ export function Shell({
                 <div>
                   <strong>運営管理者</strong>
                   <small>
-                    {adminActive ? "プレビューセッション" : "ゲストプレビュー"}
+                    {live
+                      ? adminActive
+                        ? "認証済み"
+                        : "ログインしてください"
+                      : adminActive
+                        ? "プレビューセッション"
+                        : "ゲストプレビュー"}
                   </small>
                 </div>
-                <RouteLink id="A001">
-                  <Icon name="logout" size={17} />
-                </RouteLink>
+                {live && adminActive ? (
+                  <button
+                    className="icon-button"
+                    aria-label="管理画面からログアウト"
+                    onClick={async () => {
+                      await api("/admin/auth/logout", {}, "POST", "admin");
+                      await refresh();
+                    }}
+                  >
+                    <Icon name="logout" size={17} />
+                  </button>
+                ) : (
+                  <RouteLink id="A001">
+                    <Icon name="logout" size={17} />
+                  </RouteLink>
+                )}
               </div>
             </aside>
             <div className="admin-main">
@@ -165,21 +205,26 @@ export function Shell({
                 className="admin-content"
                 data-testid={screen.id}
               >
-                <div
-                  className="admin-section-tabs"
-                  aria-label="関連する管理画面"
-                >
-                  {related.map((item) => (
-                    <RouteLink
-                      key={item.id}
-                      id={item.id}
-                      className={item.id === screen.id ? "active" : ""}
-                    >
-                      {shortTitle(item.title)}
-                    </RouteLink>
-                  ))}
+                {!live && (
+                  <div
+                    className="admin-section-tabs"
+                    aria-label="関連する管理画面"
+                  >
+                    {related.map((item) => (
+                      <RouteLink
+                        key={item.id}
+                        id={item.id}
+                        className={item.id === screen.id ? "active" : ""}
+                      >
+                        {shortTitle(item.title)}
+                      </RouteLink>
+                    ))}
+                  </div>
+                )}
+                <div className="screen-body">
+                  {live && <LivePwa admin />}
+                  {children}
                 </div>
-                <div className="screen-body">{children}</div>
               </main>
               <footer className="admin-footer">
                 <span>MANZOU LOVE CONTROL ROOM</span>
@@ -208,8 +253,22 @@ export function Shell({
               <div className="member-masthead">
                 <RouteLink id="U022" className="masthead-art">
                   <img
-                    src={publicPath("/assets/mood-cabinet.png")}
+                    src={publicPath(
+                      live && state.records.A076?.logo
+                        ? state.records.A076.logo
+                        : "/assets/mood-cabinet.png",
+                    )}
                     alt={state.settings.name}
+                    style={
+                      live && state.records.A076?.logo
+                        ? {
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            transform: "none",
+                          }
+                        : undefined
+                    }
                   />
                 </RouteLink>
                 <div className="masthead-notify-mask" aria-hidden="true" />
@@ -242,6 +301,7 @@ export function Shell({
               className="member-content"
               data-testid={screen.id}
             >
+              {live && <LivePwa />}
               {screen.id !== "U022" && (
                 <div className="page-heading">
                   <button
@@ -262,7 +322,7 @@ export function Shell({
                 </div>
               )}
               <div className="screen-body">{children}</div>
-              {related.length > 1 && (
+              {!live && related.length > 1 && (
                 <details className="related-pages">
                   <summary>関連ページ</summary>
                   <div>
@@ -302,9 +362,11 @@ export function Shell({
                 <button
                   aria-label="スペースから退出"
                   onClick={() =>
-                    update((draft) => {
-                      draft.activeRoom = null;
-                    })
+                    live
+                      ? voice.leave()
+                      : update((draft) => {
+                          draft.activeRoom = null;
+                        })
                   }
                 >
                   <Icon name="close" size={17} />

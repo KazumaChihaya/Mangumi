@@ -1,0 +1,40 @@
+{
+  "name": "@mangumi/api",
+  "private": true,
+  "type": "module",
+  "files": ["src", "tsconfig.json"],
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "admin:create": "tsx src/cli.ts admin",
+    "keys": "tsx src/cli.ts keys",
+    "openapi": "tsx src/cli.ts openapi"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/cors": "^11.3.1",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.4",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/swagger": "^9.9.2",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "argon2": "^0.45.1",
+    "fastify": "^5.12.7",
+    "livekit-server-sdk": "^2.19.1",
+    "mariadb": "^3.5.4",
+    "nodemailer": "^10.1.6",
+    "sharp": "^0.35.5",
+    "stripe": "^23.0.0",
+    "tsx": "^4.23.15",
+    "web-push": "^3.6.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
+    "@types/web-push": "^3.6.4",
+    "typescript": "~5.9.3"
+  }
+}

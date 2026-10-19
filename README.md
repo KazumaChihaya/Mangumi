@@ -5,13 +5,13 @@ YouTuberグループ「マン組」のファン向け公式アプリと運営管
 
 ## 開発状況
 
-Expo SDK 57・Expo Routerで、サイトマップの**利用者109項目・管理95項目、合計204項目**を実装したWeb／PWAのUIプレビューです。画面、例外状態、確認モーダル、共通部品を含みます。
+Expo SDK 57・Expo RouterのWeb／PWAと、FastifyのAPIを実装しています。サイトマップは**利用者109項目・管理95項目、合計204項目**です。プレビューと、APIへ接続するアプリを別々にビルドします。
 
 UI案は画面構成の根拠、別途提供された「雰囲気イメージ」は全ページのビジュアルの基準として使用しています。ゴールドの金属フレーム、赤いランプ、ネオン、リール、音を利用者・管理の全画面に適用しています。
 
-管理画面の予定・通知・ストーリー編集は同じブラウザセッションの利用者画面へ反映されます。DM、通報、問い合わせ、チケット抽選、コレクション、CSV、監査履歴もプレビュー内で操作できます。
+API接続版では、会員登録・メール確認、Cookie認証、必須の管理者二要素認証、プラン権限、予定、通知ジョブ、ストーリー、DMと録音、LiveKit音声ルーム、Stripe決済連携、抽選・景品・監査履歴をサーバーで処理します。SQLite／MariaDBへ保存し、別アカウント・別ブラウザから確認できます。登録直後にダミーの会員・売上・投稿を表示しません。
 
-**本番API、DB、メール、Web Push配信、LiveKit、Stripe、ストア課金は未接続です。** 認証は画面フローのプレビューで、実際のアカウント作成・決済・外部メッセージ配信は行いません。サンプルデータを使う本番公開前のUI実装です。
+**本番公開は未完了です。** 本番VPS・ドメイン・SMTP・VAPID・Stripe・LiveKitの設定と実環境での受入が必要です。GitHub PagesはサンプルデータのUIプレビューを提供し、会員情報や決済を扱うAPI接続版はVPSへ配置します。高度な設定・運用試験・将来のネイティブ版には残作業があります。[実装範囲と本番配置](docs/server-setup.md)を参照してください。
 
 - プロダクト名：まんぞうラブ
 - リポジトリ名：Mangumi
@@ -20,6 +20,19 @@ UI案は画面構成の根拠、別途提供された「雰囲気イメージ」
 - 実装と本番接続の境界：[UI実装メモ](docs/ui-implementation.md)
 
 ## 起動と画面確認
+
+### APIへ接続するアプリを起動する
+
+```powershell
+pnpm install --frozen-lockfile
+Copy-Item .env.example .env
+pnpm build:live
+pnpm start:live
+```
+
+`http://localhost:3001` で開きます。開発時の会員・設定は `apps/api/.local/mangumi.sqlite`、確認メールは `apps/api/.local/outbox/` に保存します。開発用メールは送信されません。管理者には初期パスワードを用意せず、環境変数を設定して `pnpm --filter @mangumi/api admin:create` を実行し、初回ログインで認証アプリを登録します。[初期設定・外部サービス・復旧手順](docs/server-setup.md)を確認してください。
+
+`EXPO_PUBLIC_API_URL` はビルド時の接続先だけに使用します。サービスの秘密鍵はAPIの環境変数へ設定します。API接続版で外部サービスが未設定の場合は、成功表示せず設定が必要であることを返します。
 
 ### GitHub Pagesで確認する
 
@@ -80,11 +93,15 @@ pnpm test
 pnpm --filter @mangumi/member exec playwright install chromium
 pnpm build
 pnpm test:e2e
+pnpm typecheck:api
+pnpm test:api
+pnpm build:live
+pnpm test:live
 ```
 
 全204項目のPC幅・320px幅での描画、横はみ出し、ブラウザエラーを確認し、編集内容の反映、DMのブロック、ガチャの二重操作、確率バージョンの保持も検証します。
 
-以下は開発予定の内容です。具体的な機能仕様、設定値、受入条件はプロダクト仕様書を参照してください。
+以下は全体仕様とリリース区分です。個別の実装状況・未検証項目は[実装範囲](docs/server-setup.md#実装範囲と残作業)、具体的な機能仕様はプロダクト仕様書を参照してください。
 
 ## プロダクト方針
 
@@ -177,7 +194,7 @@ Mangumi/
     ui-reference/
 ```
 
-実装時のモノレポ構成案：
+サーバーと配置の構成：
 
 ```text
 apps/
