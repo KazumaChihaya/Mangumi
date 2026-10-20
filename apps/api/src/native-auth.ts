@@ -34,12 +34,15 @@ async function issue(
   platform: string,
   binding: string,
   request: FastifyRequest,
+  predecessor?: string,
 ) {
+  const replaced = new Set<string>(predecessor ? [predecessor] : []);
   for (const row of await q.all(
     "SELECT id,body FROM entities WHERE resource = 'nativeAuth' AND owner_id = ?",
     [userId],
   )) {
     if (JSON.parse(row.body).binding === binding) {
+      replaced.add(row.id);
       await q.run("DELETE FROM sessions WHERE id = ?", [row.id]);
       await remove(q, "nativeAuth", row.id);
     }
@@ -67,6 +70,19 @@ async function issue(
     { sessionId, userId, platform, binding, expiresAt },
     userId,
   );
+  for (const row of await q.all(
+    "SELECT id,owner_id,body FROM entities WHERE resource = 'participants'",
+  )) {
+    const participant = JSON.parse(row.body);
+    if (participant.userId === userId && replaced.has(participant.sessionId))
+      await put(
+        q,
+        "participants",
+        row.id,
+        { ...participant, sessionId },
+        row.owner_id,
+      );
+  }
   await put(
     q,
     "nativeRefresh",
@@ -264,6 +280,7 @@ export function registerNativeAuth(
           previous.platform,
           previous.binding,
           request,
+          previous.sessionId,
         );
         await put(
           q,

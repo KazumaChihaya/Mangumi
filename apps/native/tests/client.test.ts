@@ -173,3 +173,21 @@ test("overlapping WebView handshakes cannot overwrite the latest native session 
   await Promise.all([first, second, request]);
   assert.deepEqual(seen, ["first", "second"]);
 });
+
+test("logout clears a revoked or closed account while a connection failure remains retryable", async () => {
+  let closed = false;
+  const f = fixture(async () => {
+    if (!closed) throw new Error("offline");
+    return json({ message: "account closed" }, 401);
+  });
+  f.values.set(
+    "mangumi.refresh",
+    JSON.stringify({ origin, refreshToken: "synthetic-old-device-token" }),
+  );
+  await assert.rejects(f.session.logout());
+  assert.ok(f.values.has("mangumi.refresh"));
+  closed = true;
+  await f.session.logout();
+  assert.equal(f.values.has("mangumi.refresh"), false);
+  assert.equal(f.session.userId, undefined);
+});

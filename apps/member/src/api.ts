@@ -26,10 +26,17 @@ export async function api<T = any>(
   key?: string,
 ): Promise<T> {
   if (nativeHost() && area === "member") {
-    if (path === "/billing/checkout") return nativeCall("billing.checkout", body);
+    if (path === "/billing/checkout")
+      return nativeCall("billing.checkout", body);
     if (path === "/billing/portal") return nativeCall("billing.manage");
-    if (path === "/billing/cancel") { await nativeCall("billing.manage"); throw new Error("ストアの契約管理で解約してください。結果はストアからの通知後に反映されます"); }
-    if (path === "/auth/logout" && method === "POST") await nativeCall("session.logout");
+    if (path === "/billing/cancel") {
+      await nativeCall("billing.manage");
+      throw new Error(
+        "ストアの契約管理で解約してください。結果はストアからの通知後に反映されます",
+      );
+    }
+    if (path === "/auth/logout" && method === "POST")
+      await nativeCall("session.logout");
   }
   const fingerprint = key
     ? `${area}:${method}:${path}:${JSON.stringify(body)}`
@@ -80,6 +87,13 @@ export async function api<T = any>(
       payload.code ?? "network",
     );
   if (payload.csrf) csrf[area] = payload.csrf;
+  if (
+    nativeHost() &&
+    area === "member" &&
+    path === "/me/close" &&
+    method === "POST"
+  )
+    await nativeCall("session.logout").catch(() => {});
   return payload;
 }
 export async function session(area = currentArea()) {

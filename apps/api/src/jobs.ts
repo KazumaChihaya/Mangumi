@@ -10,6 +10,7 @@ import { scheduleStart } from "../../member/src/dates.ts";
 import { activateOdds } from "./gacha-versions.ts";
 import { consume } from "./limits.ts";
 import { contentAccess } from "./content-access.ts";
+import { voiceAuthorized } from "./voice-access.ts";
 
 export async function enqueue(
   q: Query,
@@ -365,6 +366,34 @@ export async function processJobs(db: Database, external: Services) {
               { storyId: story.id },
             );
         });
+      } else if (job.kind === "voice_kick_connection") {
+        const participant = await get(
+            db,
+            "participants",
+            `${payload.roomId}_${payload.userId}`,
+          ),
+          valid = await voiceAuthorized(db, participant);
+        if (!valid) {
+          if (!external.roomService)
+            throw new Error("voice_provider_unavailable");
+          await external.roomService
+            .removeParticipant(payload.roomId, payload.userId)
+            .catch((e: any) => {
+              if (!/not found/i.test(String(e))) throw e;
+            });
+          await db.transaction(async (q) => {
+            const current = await get(
+              q,
+              "participants",
+              `${payload.roomId}_${payload.userId}`,
+            );
+            if (current && current.sessionId === participant?.sessionId)
+              await q.run(
+                "DELETE FROM entities WHERE resource = 'participants' AND id = ?",
+                [current.id],
+              );
+          });
+        }
       } else if (job.kind === "voice_kick_user") {
         for (const participant of (await list(db, "participants")).filter(
           (item) => item.userId === payload.userId,

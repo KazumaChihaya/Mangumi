@@ -6,6 +6,7 @@ import { audit, digest, fail, now } from "./security.ts";
 import { enqueue } from "./jobs.ts";
 import type { Config } from "./config.ts";
 import type { Services } from "./services.ts";
+import { voiceAuthorized } from "./voice-access.ts";
 export const qualitySchema = z
   .object({
     quality: z.enum(["excellent", "good", "poor", "lost", "unknown"]),
@@ -288,6 +289,18 @@ export function registerMonitoring(
 export async function maintenanceSweep(db: Database, external: Services) {
   const last = await get(db, "maintenance", "last");
   if (last?.at > new Date(Date.now() - 60000).toISOString()) return;
+  for (const participant of await list(db, "participants"))
+    if (participant.sessionId && !(await voiceAuthorized(db, participant)))
+      await db.transaction((q) =>
+        enqueue(
+          q,
+          digest(
+            `revoked-voice:${participant.id}:${participant.sessionId}:${now().slice(0, 16)}`,
+          ),
+          "voice_kick_connection",
+          { roomId: participant.roomId, userId: participant.userId },
+        ),
+      );
   for (const room of (await list(db, "rooms")).filter(
     (r) =>
       r.status === "開催中" &&
@@ -312,11 +325,24 @@ export async function maintenanceSweep(db: Database, external: Services) {
   await db.transaction(async (q) => {
     await q.run("DELETE FROM sessions WHERE expires_at < ?", [now()]);
     await q.run("DELETE FROM tokens WHERE expires_at < ?", [now()]);
-    for(const resource of ["nativeLinks","nativeWebTickets","nativeRefresh","knownLogins","securityEvents"])
-      for(const row of await q.all("SELECT id,body FROM entities WHERE resource = ?",[resource])) {
-        const item=JSON.parse(row.body);if(item.expiresAt && item.expiresAt<now())await remove(q,resource,row.id);
+    for (const resource of [
+      "nativeLinks",
+      "nativeWebTickets",
+      "nativeRefresh",
+      "knownLogins",
+      "securityEvents",
+    ])
+      for (const row of await q.all(
+        "SELECT id,body FROM entities WHERE resource = ?",
+        [resource],
+      )) {
+        const item = JSON.parse(row.body);
+        if (item.expiresAt && item.expiresAt < now())
+          await remove(q, resource, row.id);
       }
-    await q.run("DELETE FROM entities WHERE resource = 'nativeAuth' AND id NOT IN (SELECT id FROM sessions)");
+    await q.run(
+      "DELETE FROM entities WHERE resource = 'nativeAuth' AND id NOT IN (SELECT id FROM sessions)",
+    );
     for (const intent of (await list(q, "checkoutIntents")).filter(
       (i) => i.expiresAt < now() && !["expired", "failed"].includes(i.status),
     )) {

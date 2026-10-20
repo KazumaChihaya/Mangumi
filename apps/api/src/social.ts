@@ -16,6 +16,7 @@ import {
 } from "./domain.ts";
 import { notifyUser, enqueue } from "./jobs.ts";
 import { mediaSignature } from "./media.ts";
+import { voiceAuthorized } from "./voice-access.ts";
 
 export async function blocked(q: Query, first: string, second: string) {
   return !!(
@@ -708,6 +709,7 @@ export function registerSocial(
           userId: actor.user.id,
           name: JSON.parse(actor.user.profile).name,
           roomId: room.id,
+          sessionId: actor.session.id,
           role,
           joinedAt: now(),
           expiresAt: new Date(Date.now() + 180000).toISOString(),
@@ -733,7 +735,9 @@ export function registerSocial(
         !contentVisible({ ...room, status: "公開" }, actor.user))
     )
       fail(403, "ルームを閲覧できません");
-    return list(db, "participants", room.id);
+    return (await list(db, "participants", room.id)).map(
+      ({ sessionId, ...participant }) => participant,
+    );
   });
   app.post("/api/voice-rooms/:id/hand", async (request) =>
     db.transaction(async (q) => {
@@ -926,7 +930,17 @@ export function registerSocial(
         userId = event.participant?.identity;
       if (roomId && userId) {
         const participant = await get(q, "participants", `${roomId}_${userId}`);
-        if (participant && event.event === "participant_joined")
+        const validSession =
+          participant &&
+          (!participant.sessionId || (await voiceAuthorized(q, participant)));
+        if (event.event === "participant_joined" && !validSession)
+          await enqueue(
+            q,
+            digest(`invalid-voice:${event.id}`),
+            "voice_kick_connection",
+            { roomId, userId },
+          );
+        if (validSession && event.event === "participant_joined")
           await put(
             q,
             "participants",

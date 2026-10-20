@@ -26,8 +26,8 @@
 ## 再現と試験の境界
 
 * `pnpm typecheck`、`pnpm typecheck:api`、`pnpm --filter @mangumi/native typecheck`。
-* `pnpm test:api`：41件。SQLiteと127.0.0.1の隔離MariaDB `mangumi_test` で実施。
-* `pnpm test:native`：5件。WebViewへの認証情報漏えい防止、更新の単一化、Origin、連携の競合、遷移。
+* `pnpm test:api`：42件。SQLiteと127.0.0.1の隔離MariaDB `mangumi_test` で実施。端末失効・プラン権限失効とSFU切断、正当な更新時の音声継続も確認。
+* `pnpm test:native`：6件。WebViewへの認証情報漏えい防止、更新の単一化、Origin、連携の競合、遷移、失効・退会済み端末のログアウト。
 * `pnpm test`：モデル5件。`pnpm test:security`：依存修正4件。
 * `pnpm build:live` → 隔離SFUの `MANGUMI_TEST_LIVEKIT_URL` を指定して `pnpm test:live`。
 * `pnpm build` → `pnpm test:e2e`。`pnpm build:pages` → `pnpm test:pages`。
@@ -36,6 +36,8 @@
 * `pnpm audit --json` と `scripts/check-audit.mjs`。上流勧告2件をローカル修正と回帰試験で追跡し、監査0件とは扱わない。
 
 閲覧上限は「未閲覧コンテンツを初めて開く回数」。一覧取得・再読込・取得済みの再閲覧を重複消費しません。対象にはコンテンツID・配信者ID、カレンダーでは登録された配信者名も指定できます。Storeの業務試験は検証アダプターによるもので、Apple/Googleの実取引が合格したことを意味しません。
+
+接続済み音声の権限は1分ごとの監視と永続ジョブで再確認し、失効した端末・プラン・ブロック・BANをSFUへ反映します。不正な再接続は署名済みLiveKit Webhookから除外ジョブへ登録するため、本番のWebhook設定が必要です。
 
 ## 未実施の受入と初期無効の機能
 

@@ -409,6 +409,12 @@ export function LiveAccount({ screen }: { screen: Screen }) {
       <Notice>
         退会するとログインできなくなります。法令や通報対応に必要な履歴は、プライバシーポリシーに従って保持します。
       </Notice>
+      {billing.data?.storeSubscription?.status === "active" && (
+        <Notice>
+          App Store／Google
+          Playの自動更新は、退会だけでは停止しません。ストアの契約管理で更新の停止をご確認ください。
+        </Notice>
+      )}
       <Form
         submit="退会を確定"
         tone="danger"

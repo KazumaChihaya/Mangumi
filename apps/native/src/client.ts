@@ -195,7 +195,15 @@ export class NativeSession {
   }
   async logout() {
     if (this.tokens || (await this.storage.get("mangumi.refresh")))
-      await this.request("/api/native/logout", {});
+      try {
+        await this.request("/api/native/logout", {});
+      } catch (error) {
+        if (
+          !(error instanceof NativeApiError) ||
+          ![401, 403].includes(error.status)
+        )
+          throw error;
+      }
     await this.clear();
   }
 }

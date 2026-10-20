@@ -29,7 +29,7 @@ import { wallTimeToISO } from "../../member/src/dates.ts";
 import { activateDueOdds } from "../src/gacha-versions.ts";
 import { brandedEmail } from "../src/email.ts";
 import { createBackup, restoreBackup } from "../src/backup.ts";
-import { checkOperationalAlerts } from "../src/monitoring.ts";
+import { checkOperationalAlerts, maintenanceSweep } from "../src/monitoring.ts";
 import { expireStoreMemberships } from "../src/stores.ts";
 
 test("content view quotas apply to actual content and media, preserve retries and enforce target restrictions", async () => {
@@ -283,6 +283,118 @@ test("Google refund notifications resolve an unseen product and an old renewal r
 });
 
 const password = "Mangumi-test-password-42!";
+
+test("native token rotation preserves voice access while device revocation and lost plan rights disconnect the SFU", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      native = await nativeLogin(f, fan),
+      roomId = "session-bound-voice",
+      participantId = `${roomId}_${fan.id}`,
+      removed: any[] = [];
+    await put(f.db, "rooms", roomId, {
+      id: roomId,
+      title: "端末失効の確認",
+      hostId: official.id,
+      host: "公式",
+      status: "開催中",
+      plan: "Free",
+    });
+    (f.external as any).roomService = {
+      removeParticipant: async (...args: any[]) => {
+        removed.push(args);
+      },
+    };
+    const join = await f.app.inject({
+      method: "POST",
+      url: `/api/voice-rooms/${roomId}/token`,
+      headers: native.headers,
+      payload: {},
+    });
+    assert.equal(join.statusCode, 200, join.body);
+    const renewed = await f.app.inject({
+      method: "POST",
+      url: "/api/native/refresh",
+      headers: { "x-mangumi-request": "1" },
+      payload: {
+        nonce: native.nonce,
+        refreshToken: native.tokens.refreshToken,
+      },
+    });
+    assert.equal(renewed.statusCode, 200, renewed.body);
+    const current = digest(renewed.json().accessToken);
+    assert.equal(
+      (await get(f.db, "participants", participantId)).sessionId,
+      current,
+    );
+    await maintenanceSweep(f.db, f.external);
+    await processJobs(f.db, f.external);
+    assert.equal(removed.length, 0);
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "DELETE",
+          url: `/api/me/sessions/${current}`,
+          headers: native.web,
+        })
+      ).statusCode,
+      200,
+    );
+    await put(f.db, "maintenance", "last", { at: "2000-01-01T00:00:00.000Z" });
+    await maintenanceSweep(f.db, f.external);
+    await processJobs(f.db, f.external);
+    assert.equal(removed.length, 1);
+    assert.equal(await get(f.db, "participants", participantId), undefined);
+    (f.external as any).receiver = {
+      receive: async () => ({
+        id: "reconnect-with-revoked-voice-token",
+        event: "participant_joined",
+        room: { name: roomId },
+        participant: { identity: fan.id, sid: "synthetic-sfu-connection" },
+      }),
+    };
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/webhooks/livekit",
+          headers: { "content-type": "application/json" },
+          payload: "{}",
+        })
+      ).statusCode,
+      200,
+    );
+    await processJobs(f.db, f.external);
+    assert.equal(
+      removed.length,
+      2,
+      "a reconnect without an authorized API reservation is removed",
+    );
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: `/api/voice-rooms/${roomId}/token`,
+          headers: native.web,
+          payload: {},
+        })
+      ).statusCode,
+      200,
+    );
+    const plan = await get(f.db, "plans", "free");
+    await put(f.db, "plans", "free", {
+      ...plan,
+      policies: { "voice.join": { allowed: false, level: "view" } },
+    });
+    await put(f.db, "maintenance", "last", { at: "2000-01-01T00:00:00.000Z" });
+    await maintenanceSweep(f.db, f.external);
+    await processJobs(f.db, f.external);
+    assert.equal(removed.length, 3);
+  } finally {
+    await f.close();
+  }
+});
 async function uploadFile(
   f: Awaited<ReturnType<typeof fixture>>,
   headers: Record<string, string>,
