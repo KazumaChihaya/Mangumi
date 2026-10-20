@@ -2,7 +2,16 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { get, put, remove, type Database, type Query } from "./db.ts";
 import { identity, createSession, type User } from "./auth.ts";
-import { digest, fail, later, now, secret, seal, unseal } from "./security.ts";
+import {
+  digest,
+  fail,
+  later,
+  now,
+  secret,
+  seal,
+  unseal,
+  id,
+} from "./security.ts";
 import type { Config } from "./config.ts";
 import { Expo } from "expo-server-sdk";
 const nonce = z.string().min(20).max(100);
@@ -176,6 +185,7 @@ export function registerNativeAuth(
           userId: actor.user.id,
           subscription: { kind: "expo", token: body.token },
           nativeBinding: native.binding,
+          registrationVersion: id(),
           label: body.label,
           platform: native.platform,
           at: now(),

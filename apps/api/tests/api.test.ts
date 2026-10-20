@@ -796,6 +796,51 @@ test("native push uses the same preferences and tracks Expo receipts without res
       (await list(f.db, "deliveries", fan.id))[0].code,
       "DeviceNotRegistered",
     );
+    const next = await f.app.inject({
+      method: "POST",
+      url: "/api/native/push",
+      headers: native.headers,
+      payload: {
+        token: "ExpoPushToken[synthetic-device-42]",
+        label: "再登録された端末",
+      },
+    });
+    assert.equal(next.statusCode, 200, next.body);
+    (f.external as any).push = async () => ({
+      receiptId: "synthetic-delayed-receipt",
+    });
+    (f.external as any).pushReceipts = async () => ({
+      "synthetic-delayed-receipt": {
+        status: "error",
+        details: { error: "DeviceNotRegistered" },
+      },
+    });
+    await enqueue(f.db, "native-push-after-registration", "push", {
+      userId: fan.id,
+      title: "お知らせ",
+      body: "再登録前の配送",
+      path: "/",
+      notificationKind: "general",
+    });
+    await processJobs(f.db, f.external);
+    const device = await get(f.db, "push", next.json().id);
+    await put(
+      f.db,
+      "push",
+      device.id,
+      { ...device, registrationVersion: id() },
+      fan.id,
+    );
+    await f.db.run(
+      "UPDATE jobs SET due_at = ? WHERE kind = 'expo_receipts' AND state = 'pending'",
+      [new Date(Date.now() - 1000).toISOString()],
+    );
+    await processJobs(f.db, f.external);
+    assert.equal(
+      (await list(f.db, "push", fan.id)).length,
+      1,
+      "a delayed error for an older registration must not disable its replacement",
+    );
   } finally {
     await f.close();
   }

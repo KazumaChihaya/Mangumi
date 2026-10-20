@@ -242,7 +242,10 @@ export async function processJobs(db: Database, external: Services) {
             );
           if (
             receipt.status === "error" &&
-            receipt.details?.error === "DeviceNotRegistered"
+            receipt.details?.error === "DeviceNotRegistered" &&
+            ((await get(q, "push", payload.deviceId))?.registrationVersion ??
+              (await get(q, "push", payload.deviceId))?.at) ===
+              payload.registrationVersion
           )
             await q.run(
               "DELETE FROM entities WHERE resource = 'push' AND id = ?",
@@ -633,6 +636,8 @@ export async function processJobs(db: Database, external: Services) {
                       receiptId: accepted.receiptId,
                       deliveryId,
                       deviceId: device.id,
+                      registrationVersion:
+                        device.registrationVersion ?? device.at,
                     },
                     later(900),
                   ),
@@ -656,7 +661,11 @@ export async function processJobs(db: Database, external: Services) {
               );
               await db.transaction(async (q) => {
                 const current = await get(q, "push", device.id);
-                if (current)
+                if (
+                  current &&
+                  (current.registrationVersion ?? current.at) ===
+                    (device.registrationVersion ?? device.at)
+                )
                   await put(
                     q,
                     "push",
@@ -685,12 +694,18 @@ export async function processJobs(db: Database, external: Services) {
                 ),
               );
               if ([404, 410].includes(error.statusCode))
-                await db.transaction((q) =>
-                  q.run(
-                    "DELETE FROM entities WHERE resource = 'push' AND id = ?",
-                    [device.id],
-                  ),
-                );
+                await db.transaction(async (q) => {
+                  const current = await get(q, "push", device.id);
+                  if (
+                    current &&
+                    (current.registrationVersion ?? current.at) ===
+                      (device.registrationVersion ?? device.at)
+                  )
+                    await q.run(
+                      "DELETE FROM entities WHERE resource = 'push' AND id = ?",
+                      [device.id],
+                    );
+                });
               else throw error;
             }
           }

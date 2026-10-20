@@ -680,6 +680,7 @@ export async function createApp(
         {
           id: deviceId,
           subscription,
+          registrationVersion: id(),
           at: now(),
           agent: String(request.headers["user-agent"] ?? "").slice(0, 300),
         },
