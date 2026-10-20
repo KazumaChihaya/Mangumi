@@ -441,7 +441,8 @@ export function LivePayments({ screen }: { screen: Screen }) {
   const messages = useResource<any[]>("/tips/messages");
   return (
     <>
-      {config.data?.billingEnabled ? (
+      {config.data?.billingEnabled &&
+      state.entitlements?.["tip.send"] !== false ? (
         <Panel title="マン組を応援する">
           <Form
             submit="お支払いへ進む"
@@ -525,8 +526,16 @@ export function LivePayments({ screen }: { screen: Screen }) {
       ) : (
         <Panel>
           <Empty
-            title="応援機能は準備中です"
-            text="受付開始のお知らせをお待ちください。"
+            title={
+              config.data?.billingEnabled
+                ? "応援機能の利用には対応プランが必要です"
+                : "応援機能は準備中です"
+            }
+            text={
+              config.data?.billingEnabled
+                ? "マイページから利用できるプランをご確認ください。"
+                : "受付開始のお知らせをお待ちください。"
+            }
           />
         </Panel>
       )}

@@ -6,6 +6,7 @@ import { config as configuration } from "../src/config.ts";
 import { services } from "../src/services.ts";
 import { hashPassword, id, now, digest } from "../src/security.ts";
 import { processJobs } from "../src/jobs.ts";
+import { get, put } from "../src/db.ts";
 const directory = resolve("../../.local/live-tests");
 const config = configuration({
   NODE_ENV: "test",
@@ -39,6 +40,11 @@ const { app, db } = await createApp({
   rateLimit: false,
 });
 await db.transaction(async (q) => {
+  const free = await get(q, "plans", "free");
+  await put(q, "plans", "free", {
+    ...free,
+    features: [...free.features, "投げ銭"],
+  });
   for (const [role, email, name] of [
     ["super", "admin@example.test", "テスト運営"],
     ["member", "fan@example.test", "テストファン"],
