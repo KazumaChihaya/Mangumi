@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { publicPath } from "../web-path";
 import { Button, Icon, Panel } from "../ui";
 import { useResource } from "./hooks";
+import { nativeHost } from "../native-bridge";
 
 export function LivePwa({ admin = false }: { admin?: boolean }) {
   const [guide, setGuide] = useState(false);
@@ -47,6 +48,7 @@ export function LivePwa({ admin = false }: { admin?: boolean }) {
       major <= g.maxVersion,
   );
   useEffect(() => {
+    if(nativeHost())return;
     const standalone =
       matchMedia("(display-mode: standalone)").matches ||
       (navigator as any).standalone;
@@ -107,6 +109,7 @@ export function LivePwa({ admin = false }: { admin?: boolean }) {
       localStorage.setItem("mangumi-install-guide", "seen");
     } catch {}
   };
+  if(nativeHost())return null;
   return (
     <>
       {waiting && (

@@ -24,6 +24,24 @@ export interface Operations {
 "post_api_me_close": { body: { "password": string; "reason"?: string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_admin_auth_mfa_enroll": { body: {  }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_admin_auth_mfa_verify": { body: { "code": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"get_well_known_apple_app_site_association": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"get_well_known_assetlinks_json": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_push": { body: { "token": string; "label": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_link": { body: { "nonce": string; "platform": "ios" | "android" }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_exchange": { body: { "code": string; "nonce": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_refresh": { body: { "refreshToken": string; "nonce": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_web_ticket": { body: { "path": string; "nonce": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_web_login": { body: { "ticket": string; "nonce": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_logout": { body: {  }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"get_api_admin_store_products": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_admin_store_products": { body: { "product": { "platform": "ios" | "android"; "productId": string; "title": string; "kind": "coins" | "subscription"; "amount": number; "currency": "JPY"; "credits"?: number; "planId"?: string; "period"?: "month" | "year"; "published": boolean }; "reason": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"get_api_native_store_catalog": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_store_intents": { body: { "platform": "ios" | "android"; "productId": string; "tip"?: { "amount": number; "recipient": string; "message": string; "visibility": "private" | "public" } }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_store_intents_id_cancel": { body: {  }; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_store_verify": { body: { "platform": "ios" | "android"; "productId": string; "proof": string; "intentId"?: string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_native_tips": { body: { "amount": number; "recipient": string; "message": string; "visibility": "private" | "public" }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_webhooks_apple": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_webhooks_google_play": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_me_frame": { body: { "drawId": (string | null) }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_uploads": { body: FormData; params: {  }; query: { "kind"?: string | number; "conversationId"?: string | number }; response: { "id": string; "url": string; "duration"?: number } };
 "post_api_media_id_url": { body: {  }; params: { "id": string }; query: {  }; response: { "url": string } };
@@ -50,7 +68,7 @@ export interface Operations {
 "post_api_voice_rooms_id_leave": { body: {  }; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_voice_rooms_id_moderate": { body: { "userId": string; "action": "speaker" | "listener" | "cohost" | "mute" | "remove" | "ban" | "end"; "reason": string }; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_webhooks_livekit": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
-"post_api_billing_checkout": { body: ({ "kind": "tip"; "amount": number; "recipient": string; "message": string } | { "kind": "plan"; "planId": string; "period": "month" | "year" } | { "kind": "setup" }); params: {  }; query: {  }; response: { "url": string; "sessionId": string } };
+"post_api_billing_checkout": { body: ({ "kind": "tip"; "amount": number; "recipient": string; "message": string; "visibility": "private" | "public" } | { "kind": "plan"; "planId": string; "period": "month" | "year" } | { "kind": "setup" }); params: {  }; query: {  }; response: { "url": string; "sessionId": string } };
 "post_api_billing_cancel": { body: { "confirmed": true }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_billing_portal": { body: {  }; params: {  }; query: {  }; response: { "url": string } };
 "get_api_billing_status": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
@@ -110,6 +128,9 @@ export interface Operations {
 "post_api_admin_features": { body: { "feature": { "key": "calendar.view" | "notification.receive" | "story.view" | "dm.send" | "dm.audio.send" | "voice.join" | "voice.speak" | "voice.create" | "gacha.draw" | "tip.send"; "name": string; "description": string }; "reason": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "get_api_admin_email_templates": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_admin_email_templates": { body: { "template": { "purpose": "verify" | "email" | "reset"; "subject": string; "text": string }; "reason": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"get_api_schedules_id_reminders": { body: undefined; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
+"put_api_schedules_id_reminders": { body: { "minutes": Array<number> }; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
+"get_api_tips_messages": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "get_api_state": { body: undefined; params: {  }; query: { "campaign"?: string | number }; response: { state: DemoState; role?: string; userId?: string | null } };
 "post_api_commands": { body: { "changes": Array<{ "resource": string; "id"?: string; "before"?: unknown; "after"?: unknown }>; "reason": string; "action": string }; params: {  }; query: {  }; response: { state: DemoState; role?: string; userId?: string | null } };
 "post_api_gacha_draw": { body: { "count": number; "campaignId"?: string }; params: {  }; query: {  }; response: { "results": Array<{ "id": string; "title": string; "rarity": string; "image": string; "at": string; "version": string; "assetId"?: string; "kind"?: "photo" | "voice" | "frame"; "campaignId"?: string; "prizeId": string }>; "balance": number } };
@@ -231,6 +252,96 @@ const routes = {
   },
   "post_api_admin_auth_mfa_verify": {
     "path": "/api/admin/auth/mfa/verify",
+    "method": "POST",
+    "binary": false
+  },
+  "get_well_known_apple_app_site_association": {
+    "path": "/.well-known/apple-app-site-association",
+    "method": "GET",
+    "binary": false
+  },
+  "get_well_known_assetlinks_json": {
+    "path": "/.well-known/assetlinks.json",
+    "method": "GET",
+    "binary": false
+  },
+  "post_api_native_push": {
+    "path": "/api/native/push",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_link": {
+    "path": "/api/native/link",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_exchange": {
+    "path": "/api/native/exchange",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_refresh": {
+    "path": "/api/native/refresh",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_web_ticket": {
+    "path": "/api/native/web-ticket",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_web_login": {
+    "path": "/api/native/web-login",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_logout": {
+    "path": "/api/native/logout",
+    "method": "POST",
+    "binary": false
+  },
+  "get_api_admin_store_products": {
+    "path": "/api/admin/store-products",
+    "method": "GET",
+    "binary": false
+  },
+  "post_api_admin_store_products": {
+    "path": "/api/admin/store-products",
+    "method": "POST",
+    "binary": false
+  },
+  "get_api_native_store_catalog": {
+    "path": "/api/native/store/catalog",
+    "method": "GET",
+    "binary": false
+  },
+  "post_api_native_store_intents": {
+    "path": "/api/native/store/intents",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_store_intents_id_cancel": {
+    "path": "/api/native/store/intents/{id}/cancel",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_store_verify": {
+    "path": "/api/native/store/verify",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_native_tips": {
+    "path": "/api/native/tips",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_webhooks_apple": {
+    "path": "/api/webhooks/apple",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_webhooks_google_play": {
+    "path": "/api/webhooks/google-play",
     "method": "POST",
     "binary": false
   },
@@ -662,6 +773,21 @@ const routes = {
   "post_api_admin_email_templates": {
     "path": "/api/admin/email-templates",
     "method": "POST",
+    "binary": false
+  },
+  "get_api_schedules_id_reminders": {
+    "path": "/api/schedules/{id}/reminders",
+    "method": "GET",
+    "binary": false
+  },
+  "put_api_schedules_id_reminders": {
+    "path": "/api/schedules/{id}/reminders",
+    "method": "PUT",
+    "binary": false
+  },
+  "get_api_tips_messages": {
+    "path": "/api/tips/messages",
+    "method": "GET",
     "binary": false
   },
   "get_api_state": {

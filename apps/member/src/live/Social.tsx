@@ -15,6 +15,7 @@ import {
   Toggle,
 } from "../ui";
 import { useResource } from "./hooks";
+import { nativeHost,nativeCall } from "../native-bridge";
 
 function SignedAudio({ id }: { id: string }) {
   const [url, setUrl] = useState("");
@@ -56,13 +57,21 @@ export function LiveDM({ screen }: { screen: Screen }) {
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
   const [recorded, setRecorded] = useState<Blob>();
+  const [nativeRecorded,setNativeRecorded]=useState(false),[attachment,setAttachment]=useState<{id:string}>();
   const [preview, setPreview] = useState("");
   const [older, setOlder] = useState<any[]>([]);
   const [historyEnd, setHistoryEnd] = useState(false);
   useEffect(() => {
     setOlder([]);
     setHistoryEnd(false);
+    setAttachment(undefined);setRecorded(undefined);setNativeRecorded(false);setRecording(false);
+    if(nativeHost())return()=>{void nativeCall("audio.discard").catch(()=>{});};
   }, [selected?.id]);
+  useEffect(()=>{
+    if(!nativeHost())return;
+    const listener=((event:CustomEvent)=>{setRecording(event.detail.recording);setNativeRecorded(event.detail.ready);}) as EventListener;
+    window.addEventListener("mangumi-native-audio",listener);return()=>window.removeEventListener("mangumi-native-audio",listener);
+  },[]);
   const displayed = [...older, ...(messages.data ?? [])].filter(
     (message, index, rows) =>
       rows.findIndex((item) => item.id === message.id) === index,
@@ -252,18 +261,20 @@ export function LiveDM({ screen }: { screen: Screen }) {
           <Form
             submit="送信"
             onSubmit={async () => {
-              let mediaId;
-              if (recorded)
-                mediaId = (await upload(recorded, "audio", selected.id)).id;
+              let media=attachment;
+              if(!media && nativeRecorded){media=await nativeCall("audio.upload",{conversationId:selected.id});setAttachment(media);}
+              if(!media && recorded){media=await upload(recorded,"audio",selected.id);setAttachment(media);}
               await api(
                 `/conversations/${selected.id}/messages`,
-                { text, mediaId },
+                { text, mediaId:media?.id },
                 "POST",
                 "member",
                 crypto.randomUUID(),
               );
               setText("");
               setRecorded(undefined);
+              setAttachment(undefined);setNativeRecorded(false);
+              if(nativeHost())await nativeCall("audio.discard");
               await messages.reload();
             }}
           >
@@ -280,9 +291,13 @@ export function LiveDM({ screen }: { screen: Screen }) {
             {preview && recorded && (
               <audio src={preview} controls style={{ width: "100%" }} />
             )}
+            {nativeRecorded && <Button tone="ghost" onClick={async()=>{await nativeCall("audio.play");}}>録音を確認する</Button>}
             <Button
               tone="ghost"
               onClick={async () => {
+                if(nativeHost()){
+                  const result=await nativeCall(recording ? "audio.stop" : "audio.start",{maxSeconds:300});setRecording(result.recording);setNativeRecorded(result.ready);if(!recording)setAttachment(undefined);return;
+                }
                 if (recording) {
                   recorder.current?.stop();
                   setRecording(false);
@@ -291,6 +306,7 @@ export function LiveDM({ screen }: { screen: Screen }) {
                 const tracks = await navigator.mediaDevices.getUserMedia({
                   audio: true,
                 });
+                setAttachment(undefined);
                 stream.current = tracks;
                 const capture = new MediaRecorder(tracks);
                 recorder.current = capture;

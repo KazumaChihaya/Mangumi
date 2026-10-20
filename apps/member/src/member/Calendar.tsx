@@ -5,6 +5,8 @@ import { useStore } from "../store";
 import { safeLink } from "../model";
 import { localSchedule, scheduleStart } from "../dates";
 import type { Screen } from "../registry";
+import { api } from "../api";
+import { useResource } from "../live/hooks";
 import {
   Badge,
   Empty,
@@ -32,6 +34,20 @@ export function CalendarPage({
   const [year, setYear] = useState(live ? new Date().getFullYear() : 2026);
   const [day, setDay] = useState(live ? new Date().getDate() : 16);
   const selected = schedules.find((s) => s.id === item) ?? schedules[0];
+  const reminder = useResource(
+    live && screen.id === "U032" && selected
+      ? `/schedules/${encodeURIComponent(selected.id)}/reminders`
+      : undefined,
+    0,
+  );
+  const defaults: Record<string, number> = {
+    "24時間前": 1440,
+    "1時間前": 60,
+    "10分前": 10,
+  };
+  const timings: number[] =
+    reminder.data?.minutes ??
+    state.reminders.map((t) => defaults[t]).filter(Number.isFinite);
   if (["U029", "U032", "U033"].includes(screen.id) && !selected)
     return (
       <Panel>
@@ -43,20 +59,52 @@ export function CalendarPage({
       <>
         <Panel title="配信前のお知らせ">
           <p className="readable-text">{selected.title}</p>
-          {["24時間前", "1時間前", "10分前"].map((time) => (
-            <Toggle
-              key={time}
-              label={time}
-              checked={state.reminders.includes(time)}
-              onChange={(checked) =>
-                update((d) => {
-                  d.reminders = checked
-                    ? [...d.reminders, time]
-                    : d.reminders.filter((t) => t !== time);
-                })
-              }
-            />
-          ))}
+          {reminder.error && <Notice>{reminder.error}</Notice>}
+          {reminder.data?.enabled === false && (
+            <Notice>この配信の自動通知は運営により停止されています。</Notice>
+          )}
+          {[...new Set([1440, 60, 10, ...timings])]
+            .sort((a, b) => b - a)
+            .map((minutes) => (
+              <Toggle
+                key={minutes}
+                label={
+                  minutes === 1440
+                    ? "24時間前"
+                    : minutes === 60
+                      ? "1時間前"
+                      : `${minutes}分前`
+                }
+                checked={timings.includes(minutes)}
+                onChange={async (checked) => {
+                  if (live) {
+                    try {
+                      await api(
+                        `/schedules/${selected.id}/reminders`,
+                        {
+                          minutes: checked
+                            ? [...timings, minutes]
+                            : timings.filter((n) => n !== minutes),
+                        },
+                        "PUT",
+                      );
+                      await reminder.reload();
+                    } catch (e) {
+                      notify((e as Error).message);
+                    }
+                    return;
+                  }
+                  const time = Object.keys(defaults).find(
+                    (t) => defaults[t] === minutes,
+                  )!;
+                  await update((d) => {
+                    d.reminders = checked
+                      ? [...d.reminders, time]
+                      : d.reminders.filter((t) => t !== time);
+                  });
+                }}
+              />
+            ))}
           <Button
             className="full"
             onClick={() => notify("リマインダーを保存しました")}

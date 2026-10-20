@@ -81,6 +81,7 @@ const scheduleSchema = z
       .array(z.number().int().min(1).max(10080))
       .max(5)
       .optional(),
+    notify: z.boolean().optional(),
   })
   .strict();
 export const storySchema = z

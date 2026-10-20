@@ -312,6 +312,11 @@ export async function maintenanceSweep(db: Database, external: Services) {
   await db.transaction(async (q) => {
     await q.run("DELETE FROM sessions WHERE expires_at < ?", [now()]);
     await q.run("DELETE FROM tokens WHERE expires_at < ?", [now()]);
+    for(const resource of ["nativeLinks","nativeWebTickets","nativeRefresh","knownLogins","securityEvents"])
+      for(const row of await q.all("SELECT id,body FROM entities WHERE resource = ?",[resource])) {
+        const item=JSON.parse(row.body);if(item.expiresAt && item.expiresAt<now())await remove(q,resource,row.id);
+      }
+    await q.run("DELETE FROM entities WHERE resource = 'nativeAuth' AND id NOT IN (SELECT id FROM sessions)");
     for (const intent of (await list(q, "checkoutIntents")).filter(
       (i) => i.expiresAt < now() && !["expired", "failed"].includes(i.status),
     )) {

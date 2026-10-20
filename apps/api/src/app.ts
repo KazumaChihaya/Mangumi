@@ -59,9 +59,13 @@ import { registerGachaVersions } from "./gacha-versions.ts";
 import { registerCampaigns } from "./campaigns.ts";
 import { registerInstallGuides } from "./install-guides.ts";
 import { registerMonitoring, maintenanceSweep } from "./monitoring.ts";
+import { registerNativeAuth } from "./native-auth.ts";
+import { registerStores, expireStoreMemberships } from "./stores.ts";
 import { apiSpecification } from "./openapi.ts";
 import { registerFeatures } from "./features.ts";
 import { registerEmailTemplates } from "./email.ts";
+import { registerReminders } from "./reminders.ts";
+import { registerTipMessages } from "./tip-messages.ts";
 
 export async function createApp(
   options: {
@@ -173,6 +177,18 @@ export async function createApp(
       request.url.startsWith("/api/webhooks/")
     )
       return;
+    const nativeTransport =
+      !request.headers.origin &&
+      request.headers["x-mangumi-request"] === "1" &&
+      (/^Bearer [A-Za-z0-9_-]{32,100}$/.test(
+        String(request.headers.authorization ?? ""),
+      ) ||
+        [
+          "/api/native/exchange",
+          "/api/native/refresh",
+          "/api/native/web-login",
+        ].includes(request.url.split("?")[0]));
+    if (nativeTransport) return;
     if (
       request.headers.origin !== config.origin ||
       request.headers["x-mangumi-request"] !== "1"
@@ -244,6 +260,8 @@ export async function createApp(
   });
   app.get("/api/openapi.json", async () => apiSpecification(app.swagger()));
   registerAuth(app, db, config);
+  registerNativeAuth(app, db, config);
+  registerStores(app, db, config, external);
   registerMedia(app, db, config);
   registerSocial(app, db, config, external);
   registerBilling(app, db, config, external);
@@ -258,6 +276,8 @@ export async function createApp(
   const checkAlerts = registerMonitoring(app, db, config);
   registerFeatures(app, db, config);
   registerEmailTemplates(app, db, config);
+  registerReminders(app, db, config);
+  registerTipMessages(app, db, config);
   app.get("/api/state", async (request) =>
     db.transaction(async (q) => {
       const area =
@@ -778,6 +798,7 @@ export async function createApp(
             .then(() => runRetention(db, config))
             .then(() => checkAlerts())
             .then(() => maintenanceSweep(db, external))
+            .then(() => expireStoreMemberships(db))
             .catch((error) =>
               app.log.error(
                 { code: error.code ?? "worker_failed" },

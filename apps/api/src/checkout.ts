@@ -2,8 +2,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { get, list, put, type Database } from "./db.ts";
 import { identity } from "./auth.ts";
-import { entitled } from "./domain.ts";
-import { consume, periodKeys } from "./limits.ts";
+import { reserveTip } from "./tipping.ts";
 import { digest, fail, id, now, once } from "./security.ts";
 import type { Config } from "./config.ts";
 import type { Services } from "./services.ts";
@@ -14,6 +13,7 @@ export const checkoutSchema = z.discriminatedUnion("kind", [
       amount: z.number().int().min(100),
       recipient: z.string().min(1).max(100),
       message: z.string().max(500),
+      visibility: z.enum(["private","public"]).default("private"),
     })
     .strict(),
   z
@@ -46,6 +46,8 @@ export function registerCheckout(
         if (body.kind === "plan") {
           plan = await get(q, "plans", body.planId);
           const subscription = await get(q, "subscription", actor.user.id);
+          const nativeSubscription = await get(q,"storeSubscription",actor.user.id);
+          if(nativeSubscription?.status === "active" && nativeSubscription.expiresAt > now())fail(409,"ストアの契約中です。App Store／Google Playの契約管理をご確認ください");
           if (
             !plan?.published ||
             plan.price <= 0 ||
@@ -78,67 +80,7 @@ export function registerCheckout(
           if (plan.trialDays && !subscription?.trialUsed)
             trialDays = plan.trialDays;
         } else if (body.kind === "tip") {
-          await entitled(q, actor.user, "tip.send");
-          await consume(q, actor.user, "tip.send", {
-            target: body.recipient,
-            level: "send",
-          });
-          if (
-            body.amount < (settings.tipMin ?? 100) ||
-            body.amount > settings.tipMax
-          )
-            fail(400, "応援金額が設定範囲外です");
-          if (
-            !(
-              await q.all(
-                "SELECT id FROM users WHERE id = ? AND role = 'official' AND status = 'active'",
-                [body.recipient],
-              )
-            ).length
-          )
-            fail(400, "受取対象を選んでください");
-          const words = settings.ngWords
-            .split(/[,、\n]/)
-            .map((w: string) => w.trim())
-            .filter(Boolean);
-          if (words.some((w: string) => body.message.includes(w)))
-            fail(400, "送信できない言葉が含まれています");
-          const tips = (await list(q, "tips", actor.user.id)).filter((t) =>
-            ["pending", "paid"].includes(t.paymentStatus),
-          );
-          const periods = periodKeys();
-          for (const [period, limit] of [
-            ["day", settings.tipDaily ?? settings.tipMax * 5],
-            ["month", settings.tipMonthly ?? settings.tipMax * 20],
-          ] as const)
-            if (
-              tips
-                .filter(
-                  (t) =>
-                    periodKeys(Date.parse(t.at))[period] === periods[period],
-                )
-                .reduce((n, t) => n + t.amount, 0) +
-                body.amount >
-              limit
-            )
-              fail(409, "応援金額の期間上限に達しています");
-          tipId = id();
-          await put(
-            q,
-            "tips",
-            tipId,
-            {
-              id: tipId,
-              userId: actor.user.id,
-              amount: body.amount,
-              recipient: body.recipient,
-              message: body.message,
-              status: "決済待ち",
-              paymentStatus: "pending",
-              at: now(),
-            },
-            actor.user.id,
-          );
+          tipId = await reserveTip(q, actor.user, body);
         }
         await put(
           q,

@@ -13,6 +13,7 @@ import type { Screen } from "../registry";
 import { Button, Empty, Field, Form, Notice, Panel, Row } from "../ui";
 import { useResource } from "./hooks";
 import { OfficialRoom } from "./Official";
+import { nativeHost,nativeCall } from "../native-bridge";
 
 type Voice = {
   active: string;
@@ -40,6 +41,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const elements = useRef(new Set<HTMLMediaElement>());
   const connecting = useRef(false);
   async function leave() {
+    if (nativeHost()) {
+      await nativeCall("voice.leave"); setActive("");setConnected(false);setMuted(true);
+      await update(state=>{state.activeRoom=null;state.speaking=false;});return;
+    }
     const id = active;
     const previous = room.current;
     room.current = undefined;
@@ -65,6 +70,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     }
   }
   async function connectRoom(id: string) {
+    if (nativeHost()) {
+      const response=await nativeCall("voice.join",{id});setActive(response.active);setConnected(response.connected);setRole(response.role);setMuted(response.muted);setError(response.error);
+      await update(state=>{state.activeRoom=id;state.speaking=response.role!=="listener";state.muted=response.muted;});return;
+    }
     if (room.current) await leave();
     const response = await api(`/voice-rooms/${id}/token`, {});
     const next = new Room({ adaptiveStream: true, dynacast: true });
@@ -139,6 +148,14 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+  useEffect(()=>{
+    if(!nativeHost())return;
+    const changed=((event:CustomEvent)=>{const value=event.detail;setActive(value.active);setConnected(value.connected);setMuted(value.muted);setRole(value.role);setError(value.error);setQuality(value.quality);
+      void update(state=>{state.activeRoom=value.active || null;state.muted=value.muted;state.speaking=value.role!=="listener" && !!value.active;});}) as EventListener;
+    window.addEventListener("mangumi-native-voice",changed);
+    void nativeCall("voice.state").then(value=>changed(new CustomEvent("mangumi-native-voice",{detail:value}))).catch(()=>{});
+    return()=>window.removeEventListener("mangumi-native-voice",changed);
+  },[]);
   useEffect(() => {
     if (!state.profile.signedIn && room.current) void leave().catch(() => {});
   }, [state.profile.signedIn]);
@@ -186,11 +203,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     join,
     leave,
     microphone: async () => {
+      if(nativeHost()){const response=await nativeCall("voice.microphone");setMuted(response.muted);return;}
       if (!room.current) throw new Error("ルームに参加してください");
       await room.current.localParticipant.setMicrophoneEnabled(muted);
       setMuted(!muted);
     },
     startAudio: async () => {
+      if(nativeHost())return;
       await room.current?.startAudio();
     },
   };

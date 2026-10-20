@@ -6,6 +6,7 @@ import { yen } from "../model";
 import { features as featureRegistry } from "../features";
 import { useResource } from "./hooks";
 import { datetimeInput } from "../dates";
+import { LiveStoreProducts } from "./StoreProducts";
 const features = [
   "配信予定",
   "ストーリー",
@@ -22,6 +23,7 @@ export function LivePlansAdmin() {
   const [selected, setSelected] = useState<string[]>(features.slice(0, 5));
   return (
     <>
+      <LiveStoreProducts />
       <Panel title="プラン管理">
         {state.plans.map((plan) => (
           <Row

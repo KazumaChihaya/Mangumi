@@ -7,6 +7,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/member/package.json ./apps/member/package.json
+COPY apps/native/package.json ./apps/native/package.json
 RUN --mount=type=cache,id=mangumi-pnpm,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build:live

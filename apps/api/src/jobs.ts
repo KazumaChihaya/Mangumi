@@ -95,6 +95,7 @@ export async function scheduleReminders(db: Database) {
       "SELECT * FROM users WHERE status = 'active' AND verified = 1",
     );
     for (const schedule of schedules) {
+      if (schedule.notify === false) continue;
       if (!contentVisible(schedule, undefined) && schedule.plan === "Free")
         continue;
       if (
@@ -108,14 +109,28 @@ export async function scheduleReminders(db: Database) {
         if (!contentVisible(schedule, user)) continue;
         const preferences = await get(q, "preferences", user.id);
         if (preferences?.settings?.notifySchedule === false) continue;
-        const reminders = preferences?.reminders ?? ["1時間前", "10分前"];
+        const custom = await get(
+          q,
+          "scheduleReminders",
+          `${user.id}_${schedule.id}`,
+        );
         const minutes: Record<string, number> = {
           "24時間前": 1440,
           "1時間前": 60,
           "10分前": 10,
         };
-        for (const reminder of reminders) {
-          const due = new Date(start - minutes[reminder] * 60000).toISOString();
+        const timings: number[] =
+          custom?.minutes ??
+          (schedule.reminderMinutes?.length
+            ? schedule.reminderMinutes
+            : (
+                preferences?.reminders ??
+                settings.reminders ?? ["1時間前", "10分前"]
+              )
+                .map((r: string) => minutes[r])
+                .filter(Number.isFinite));
+        for (const reminder of new Set(timings)) {
+          const due = new Date(start - reminder * 60000).toISOString();
           if (Date.parse(due) < Date.now() - 60000) continue;
           await enqueue(
             q,
@@ -129,6 +144,7 @@ export async function scheduleReminders(db: Database) {
               notificationKind: "schedule",
               scheduleId: schedule.id,
               startsAt: start,
+              reminderMinutes: reminder,
             },
             due,
           );
@@ -190,6 +206,45 @@ export async function processJobs(db: Database, external: Services) {
               payload.path,
               payload.kind,
               payload.context,
+            );
+        });
+      } else if (job.kind === "expo_receipts") {
+        const receipts = await external.pushReceipts([payload.receiptId]),
+          receipt = receipts[payload.receiptId];
+        if (!receipt) {
+          if (job.attempts >= 5) throw new Error("expo_receipt_missing");
+          await db.run(
+            "UPDATE jobs SET state = 'pending', due_at = ?, locked_until = NULL WHERE id = ?",
+            [later(300), job.id],
+          );
+          continue;
+        }
+        await db.transaction(async (q) => {
+          const delivery = await get(q, "deliveries", payload.deliveryId);
+          if (delivery)
+            await put(
+              q,
+              "deliveries",
+              delivery.id,
+              {
+                ...delivery,
+                providerStatus: receipt.status,
+                ...(receipt.status === "error"
+                  ? {
+                      status: "failed",
+                      code: receipt.details?.error ?? "expo_error",
+                    }
+                  : { deliveredAt: now() }),
+              },
+              delivery.userId,
+            );
+          if (
+            receipt.status === "error" &&
+            receipt.details?.error === "DeviceNotRegistered"
+          )
+            await q.run(
+              "DELETE FROM entities WHERE resource = 'push' AND id = ?",
+              [payload.deviceId],
             );
         });
       } else if (job.kind === "mail") {
@@ -432,12 +487,37 @@ export async function processJobs(db: Database, external: Services) {
           const schedule = await get(db, "schedules", payload.scheduleId);
           if (
             !schedule ||
+            schedule.notify === false ||
             !contentVisible(schedule, user) ||
             scheduleStart(schedule) !== payload.startsAt
           )
             deliver = false;
+          if (schedule && payload.reminderMinutes !== undefined) {
+            const custom = await get(
+                db,
+                "scheduleReminders",
+                `${payload.userId}_${schedule.id}`,
+              ),
+              labels: Record<string, number> = {
+                "24時間前": 1440,
+                "1時間前": 60,
+                "10分前": 10,
+              };
+            const timings =
+              custom?.minutes ??
+              (schedule.reminderMinutes?.length
+                ? schedule.reminderMinutes
+                : (
+                    preferences?.reminders ??
+                    global.reminders ?? ["1時間前", "10分前"]
+                  ).map((r: string) => labels[r]));
+            if (!timings.includes(payload.reminderMinutes)) deliver = false;
+          }
         }
-        const delay = deliver ? quietDelay(preferences?.settings ?? global) : 0;
+        const delay =
+          deliver && payload.urgent !== "1"
+            ? quietDelay(preferences?.settings ?? global)
+            : 0;
         if (delay) {
           await db.transaction((q) =>
             q.run(
@@ -481,7 +561,7 @@ export async function processJobs(db: Database, external: Services) {
             if ((await get(db, "deliveries", deliveryId))?.status === "sent")
               continue;
             try {
-              await external.push(device.subscription, {
+              const accepted = await external.push(device.subscription, {
                 icon:
                   (await get(db, "brand", "current"))?.notificationIcon ??
                   "/api/brand/icon/192",
@@ -491,6 +571,20 @@ export async function processJobs(db: Database, external: Services) {
                 tag: job.id,
                 deliveryId,
               });
+              if (accepted?.receiptId)
+                await db.transaction((q) =>
+                  enqueue(
+                    q,
+                    digest(`receipt:${accepted.receiptId}`),
+                    "expo_receipts",
+                    {
+                      receiptId: accepted.receiptId,
+                      deliveryId,
+                      deviceId: device.id,
+                    },
+                    later(900),
+                  ),
+                );
               await db.transaction((q) =>
                 put(
                   q,

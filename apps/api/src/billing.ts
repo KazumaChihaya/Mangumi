@@ -95,6 +95,7 @@ export function registerBilling(
     const actor = await identity(db, request, config, "member");
     return {
       subscription: await get(db, "subscription", actor.user.id),
+      storeSubscription: await get(db,"storeSubscription",actor.user.id),
       tips: await list(db, "tips", actor.user.id),
       paymentMethod: (await get(db, "paymentCustomer", actor.user.id))
         ?.paymentMethod,
@@ -126,6 +127,7 @@ export function registerBilling(
           );
           if (step < 0) fail(403, "新しい二要素認証コードを入力してください");
           const tip = await get(q, "tips", body.tipId);
+          if(tip?.provider && tip.provider !== "stripe") fail(409,"ストア購入の返金はApp Store／Google Playで処理してください。コイン使用をStripeから返金することはできません");
           const allocatedRefunds = (await list(q, "refunds"))
             .filter(
               (refund) =>

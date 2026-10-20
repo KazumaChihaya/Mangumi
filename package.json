@@ -11,6 +11,8 @@
     "start:live": "pnpm --filter @mangumi/api start",
     "test:api": "pnpm --filter @mangumi/api test",
     "test:security": "node --test scripts/security.test.mjs",
+    "test:native": "pnpm --filter @mangumi/api exec tsx --test ../../apps/native/tests/*.test.ts",
+    "build:native": "pnpm --filter @mangumi/native build",
     "test:load": "pnpm --filter @mangumi/api exec tsx tests/load.ts",
     "generate:client": "pnpm --filter @mangumi/api openapi && node scripts/generate-client.mjs",
     "test:live": "pnpm --filter @mangumi/member exec playwright test --config playwright.live.config.ts",

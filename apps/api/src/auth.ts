@@ -3,6 +3,7 @@ import argon2 from "argon2";
 import { z } from "zod";
 import type { Database, Query } from "./db.ts";
 import { put, get } from "./db.ts";
+import { recordLogin,securityNotice } from "./auth-security.ts";
 import type { Config } from "./config.ts";
 import {
   audit,
@@ -60,7 +61,8 @@ export async function identity(
   verified = true,
   mfa = true,
 ): Promise<Identity> {
-  const token = request.cookies[cookieName(config, area)];
+  const bearer = area === "member" ? /^Bearer ([A-Za-z0-9_-]{32,100})$/.exec(String(request.headers.authorization ?? ""))?.[1] : undefined;
+  const token = bearer ?? request.cookies[cookieName(config, area)];
   if (!token) fail(401, "ログインしてください", "unauthenticated");
   const session = (
     await q.all(
@@ -70,6 +72,10 @@ export async function identity(
   )[0];
   if (!session)
     fail(401, "セッションの有効期限が切れました", "unauthenticated");
+  if (bearer) {
+    const native = await get(q, "nativeAuth", session.id);
+    if (!native || native.expiresAt <= now()) fail(401, "アプリの認証を更新してください", "native_expired");
+  }
   const user = (
     await q.all<User>("SELECT * FROM users WHERE id = ?", [session.user_id])
   )[0];
@@ -93,7 +99,7 @@ export async function identity(
   )
     fail(403, "管理者の二要素認証が必要です", "mfa_required");
   if (
-    !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+    !bearer && !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
     request.headers["x-csrf-token"] !== session.csrf
   )
     fail(403, "ページを再読み込みして操作してください", "csrf");
@@ -145,6 +151,7 @@ export async function createSession(
     Object.values(session),
   );
   await put(q, "activity", user.id, { userId: user.id, at: now() }, user.id);
+  if(area === "member")await recordLogin(q,user,area,request,config);
   reply.setCookie(cookieName(config, area), token, {
     path: "/",
     httpOnly: true,
@@ -178,7 +185,7 @@ export async function mailToken(
       digest(value),
       user.id,
       purpose,
-      JSON.stringify({ email }),
+      JSON.stringify({ email, ...(purpose === "email" ? {previousEmail:user.email} : {}) }),
       later(purpose === "reset" ? 1800 : 86400),
     ],
   );
@@ -484,6 +491,11 @@ export function registerAuth(
       );
       if (row.purpose === "email")
         await q.run("DELETE FROM sessions WHERE user_id = ?", [row.user_id]);
+      if(row.purpose === "email"){
+        const changed=(await q.all<User>("SELECT * FROM users WHERE id = ?",[row.user_id]))[0];
+        const previousAddress=JSON.parse(row.payload).previousEmail;
+        if(previousAddress)await securityNotice(q,{...changed,email:previousAddress},"メールアドレスが変更されました",`新しいメールアドレス: ${email}`,config);
+      }
       return { ok: true };
     });
   });
@@ -530,6 +542,9 @@ export function registerAuth(
         [row.user_id],
       );
       await q.run("DELETE FROM sessions WHERE user_id = ?", [row.user_id]);
+      const changed=(await q.all<User>("SELECT * FROM users WHERE id = ?",[row.user_id]))[0];
+      if(!changed || changed.status !== "active")fail(400,"リンクが無効または期限切れです");
+      await securityNotice(q,changed,"パスワードが変更されました","パスワード再設定が完了し、ログイン中の全端末を解除しました。",config);
       await audit(
         q,
         row.user_id,
@@ -695,6 +710,8 @@ export function registerAuth(
         await q.run("UPDATE sessions SET mfa = 1 WHERE id = ?", [
           actor.session.id,
         ]);
+        await recordLogin(q,actor.user,"admin",request,config);
+        if(recoveryIndex >= 0)await securityNotice(q,actor.user,"管理者の復旧コードが使われました","管理画面へのログインで復旧コードが使用されました。",config);
         await audit(
           q,
           actor.user.id,

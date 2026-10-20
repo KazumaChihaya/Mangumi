@@ -30,6 +30,7 @@ import { activateDueOdds } from "../src/gacha-versions.ts";
 import { brandedEmail } from "../src/email.ts";
 import { createBackup, restoreBackup } from "../src/backup.ts";
 import { checkOperationalAlerts } from "../src/monitoring.ts";
+import { expireStoreMemberships } from "../src/stores.ts";
 
 const password = "Mangumi-test-password-42!";
 async function uploadFile(
@@ -230,6 +231,685 @@ async function fixture(persistent = false) {
     },
   };
 }
+async function nativeLogin(
+  f: Awaited<ReturnType<typeof fixture>>,
+  account: { email: string },
+  platform = "ios",
+) {
+  const web = await f.login(account),
+    nonce = id(),
+    linked = await f.app.inject({
+      method: "POST",
+      url: "/api/native/link",
+      headers: web,
+      payload: { nonce, platform },
+    });
+  assert.equal(linked.statusCode, 200, linked.body);
+  const response = await f.app.inject({
+    method: "POST",
+    url: "/api/native/exchange",
+    headers: { "x-mangumi-request": "1" },
+    payload: { nonce, code: linked.json().code },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  return {
+    web,
+    nonce,
+    tokens: response.json(),
+    headers: {
+      authorization: `Bearer ${response.json().accessToken}`,
+      "x-mangumi-request": "1",
+      "idempotency-key": id(),
+    },
+  };
+}
+test("native sessions bind one-time codes, rotate credentials and reject revoked devices or cookie tokens as bearer", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      native = await nativeLogin(f, fan);
+    const fakeCookie = decodeURIComponent(native.web.cookie.split("=")[1]);
+    assert.equal(
+      (
+        await f.app.inject({
+          url: "/api/me/sessions",
+          headers: { authorization: `Bearer ${fakeCookie}` },
+        })
+      ).statusCode,
+      401,
+    );
+    const contact = await f.app.inject({
+      method: "POST",
+      url: "/api/conversations",
+      headers: native.headers,
+      payload: { peer: official.id },
+    });
+    assert.equal(contact.statusCode, 200, contact.body);
+    assert.equal(
+      (
+        await f.app.inject({
+          url: "/api/admin/members",
+          headers: native.headers,
+        })
+      ).statusCode,
+      401,
+    );
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/native/refresh",
+          headers: {
+            "x-mangumi-request": "1",
+            origin: "https://outside.example.test",
+          },
+          payload: {
+            nonce: native.nonce,
+            refreshToken: native.tokens.refreshToken,
+          },
+        })
+      ).statusCode,
+      403,
+    );
+    const refreshPayload = {
+        nonce: native.nonce,
+        refreshToken: native.tokens.refreshToken,
+      },
+      head = { "x-mangumi-request": "1" };
+    const refreshed = await f.app.inject({
+      method: "POST",
+      url: "/api/native/refresh",
+      headers: head,
+      payload: refreshPayload,
+    });
+    assert.equal(refreshed.statusCode, 200, refreshed.body);
+    const retried = await f.app.inject({
+      method: "POST",
+      url: "/api/native/refresh",
+      headers: head,
+      payload: refreshPayload,
+    });
+    assert.deepEqual(
+      retried.json(),
+      refreshed.json(),
+      "a lost refresh response can be retried for the same installation",
+    );
+    assert.equal(
+      (await f.app.inject({ url: "/api/me/sessions", headers: native.headers }))
+        .statusCode,
+      401,
+    );
+    const active = {
+      ...native.headers,
+      authorization: `Bearer ${refreshed.json().accessToken}`,
+    };
+    const ticket = await f.app.inject({
+      method: "POST",
+      url: "/api/native/web-ticket",
+      headers: active,
+      payload: { nonce: native.nonce, path: "/u/U022" },
+    });
+    assert.equal(ticket.statusCode, 200, ticket.body);
+    const login = await f.app.inject({
+      method: "POST",
+      url: "/api/native/web-login",
+      headers: head,
+      payload: { nonce: native.nonce, ticket: ticket.json().ticket },
+    });
+    assert.equal(login.statusCode, 303, login.body);
+    assert.equal(login.headers.location, "/u/U022");
+    assert.ok(login.cookies.some((c) => c.httpOnly));
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/native/web-login",
+          headers: head,
+          payload: { nonce: native.nonce, ticket: ticket.json().ticket },
+        })
+      ).statusCode,
+      401,
+    );
+    const lostDevice = digest(refreshed.json().accessToken);
+    await f.db.run("DELETE FROM sessions WHERE id = ?", [lostDevice]);
+    const revoked = await f.app.inject({
+      method: "POST",
+      url: "/api/native/refresh",
+      headers: head,
+      payload: {
+        nonce: native.nonce,
+        refreshToken: refreshed.json().refreshToken,
+      },
+    });
+    assert.equal(revoked.statusCode, 401);
+    const replayAfterRevoke = await f.app.inject({
+      method: "POST",
+      url: "/api/native/refresh",
+      headers: head,
+      payload: refreshPayload,
+    });
+    assert.equal(replayAfterRevoke.statusCode, 401);
+  } finally {
+    await f.close();
+  }
+});
+test("native push uses the same preferences and tracks Expo receipts without resurrecting an unregistered device", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      native = await nativeLogin(f, fan);
+    const registration = await f.app.inject({
+      method: "POST",
+      url: "/api/native/push",
+      headers: native.headers,
+      payload: {
+        token: "ExpoPushToken[synthetic-device-42]",
+        label: "iPhone test",
+      },
+    });
+    assert.equal(registration.statusCode, 200, registration.body);
+    (f.external as any).push = async () => ({ receiptId: "synthetic-receipt" });
+    (f.external as any).pushReceipts = async () => ({
+      "synthetic-receipt": {
+        status: "error",
+        details: { error: "DeviceNotRegistered" },
+      },
+    });
+    await enqueue(f.db, "native-push-test", "push", {
+      userId: fan.id,
+      title: "お知らせ",
+      body: "テスト配信",
+      path: "/",
+      notificationKind: "general",
+    });
+    await processJobs(f.db, f.external);
+    assert.equal((await list(f.db, "deliveries", fan.id))[0].status, "sent");
+    await f.db.run("UPDATE jobs SET due_at = ? WHERE kind = 'expo_receipts'", [
+      new Date(Date.now() - 1000).toISOString(),
+    ]);
+    await processJobs(f.db, f.external);
+    assert.equal((await list(f.db, "push", fan.id)).length, 0);
+    assert.equal(
+      (await list(f.db, "deliveries", fan.id))[0].code,
+      "DeviceNotRegistered",
+    );
+  } finally {
+    await f.close();
+  }
+});
+test("verified native purchases fund coins once, tips consume atomically and refunds cannot be replayed into credit", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      other = await f.user(),
+      official = await f.user("official"),
+      native = await nativeLogin(f, fan),
+      admin = await f.login(await f.user("super"), "admin", true);
+    await f.db.transaction(async (q) => {
+      const settings = await get(q, "settings", "global");
+      await put(q, "settings", "global", { ...settings, billingEnabled: true });
+      const plan = await get(q, "plans", "free");
+      await put(q, "plans", "free", {
+        ...plan,
+        features: [...plan.features, "投げ銭"],
+      });
+    });
+    const product = {
+      platform: "ios",
+      productId: "test.coins500",
+      title: "500コイン",
+      kind: "coins",
+      amount: 500,
+      currency: "JPY",
+      credits: 500,
+      published: true,
+    };
+    const saved = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/store-products",
+      headers: admin,
+      payload: { product, reason: "アプリの応援商品を登録する" },
+    });
+    assert.equal(saved.statusCode, 200, saved.body);
+    let revoked = false;
+    (f.external as any).storeReady = async () => {};
+    (f.external as any).verifyStore = async () => ({
+      platform: "ios",
+      id: "store-transaction-1",
+      originalId: "store-transaction-1",
+      productId: product.productId,
+      accountId: fan.id,
+      purchasedAt: now(),
+      revoked,
+      quantity: 1,
+      amount: 500,
+      currency: "JPY",
+    });
+    const intent = await f.app.inject({
+      method: "POST",
+      url: "/api/native/store/intents",
+      headers: native.headers,
+      payload: {
+        platform: "ios",
+        productId: product.productId,
+        tip: {
+          amount: 100,
+          recipient: official.id,
+          message: "応援しています",
+          visibility: "private",
+        },
+      },
+    });
+    assert.equal(intent.statusCode, 200, intent.body);
+    const proof = {
+      platform: "ios",
+      productId: product.productId,
+      proof: "synthetic-jws-test-only",
+      intentId: intent.json().intentId,
+    };
+    await f.app.inject({
+      method: "POST",
+      url: "/api/admin/store-products",
+      headers: admin,
+      payload: {
+        product: { ...product, credits: 999 },
+        reason: "将来購入分のコイン数を変更",
+      },
+    });
+    for (let i = 0; i < 3; i++) {
+      const verified = await f.app.inject({
+        method: "POST",
+        url: "/api/native/store/verify",
+        headers: native.headers,
+        payload: proof,
+      });
+      assert.equal(verified.statusCode, 200, verified.body);
+    }
+    assert.equal((await get(f.db, "nativeWallet", fan.id)).balance, 400);
+    assert.equal(
+      (await list(f.db, "tips", fan.id)).filter(
+        (t) => t.paymentStatus === "paid",
+      ).length,
+      1,
+    );
+    const second = await nativeLogin(f, other);
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/native/store/verify",
+          headers: second.headers,
+          payload: proof,
+        })
+      ).statusCode,
+      403,
+    );
+    const spendHeaders = { ...native.headers, "idempotency-key": id() };
+    for (let i = 0; i < 2; i++) {
+      const spend = await f.app.inject({
+        method: "POST",
+        url: "/api/native/tips",
+        headers: spendHeaders,
+        payload: {
+          amount: 100,
+          recipient: official.id,
+          message: "コインから応援",
+        },
+      });
+      assert.equal(spend.statusCode, 200, spend.body);
+    }
+    assert.equal((await get(f.db, "nativeWallet", fan.id)).balance, 300);
+    revoked = true;
+    const refund = await f.app.inject({
+      method: "POST",
+      url: "/api/native/store/verify",
+      headers: native.headers,
+      payload: proof,
+    });
+    assert.equal(refund.statusCode, 200, refund.body);
+    assert.equal((await get(f.db, "nativeWallet", fan.id)).balance, -200);
+    revoked = false;
+    await f.app.inject({
+      method: "POST",
+      url: "/api/native/store/verify",
+      headers: native.headers,
+      payload: proof,
+    });
+    assert.equal(
+      (await get(f.db, "nativeWallet", fan.id)).balance,
+      -200,
+      "an older receipt cannot undo a verified refund",
+    );
+    const noBalance = await f.app.inject({
+      method: "POST",
+      url: "/api/native/tips",
+      headers: { ...native.headers, "idempotency-key": id() },
+      payload: { amount: 100, recipient: official.id, message: "不足時" },
+    });
+    assert.equal(noBalance.statusCode, 409);
+    (f.external as any).appleNotification = async () => ({
+      eventId: "refund-reversed-event-test",
+      reversed: true,
+      transaction: await (f.external as any).verifyStore(),
+    });
+    for (let i = 0; i < 2; i++)
+      assert.equal(
+        (
+          await f.app.inject({
+            method: "POST",
+            url: "/api/webhooks/apple",
+            headers: { "content-type": "application/json" },
+            payload: JSON.stringify({
+              signedPayload: "synthetic-signed-payload",
+            }),
+          })
+        ).statusCode,
+        200,
+      );
+    assert.equal(
+      (await get(f.db, "nativeWallet", fan.id)).balance,
+      300,
+      "only an authenticated refund reversal restores the original credits, once",
+    );
+  } finally {
+    await f.close();
+  }
+});
+test("native subscriptions require verified ownership and automatically expire without a client success claim", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      native = await nativeLogin(f, fan),
+      admin = await f.login(await f.user("super"), "admin", true);
+    await f.db.transaction(async (q) => {
+      await put(q, "plans", "native-gold", {
+        id: "native-gold",
+        name: "Native Gold",
+        price: 1000,
+        published: true,
+        features: ["公式DM"],
+      });
+      await put(q, "settings", "global", {
+        ...(await get(q, "settings", "global")),
+        billingEnabled: true,
+      });
+    });
+    const product = {
+      platform: "ios",
+      productId: "test.monthly",
+      title: "月額プラン",
+      kind: "subscription",
+      amount: 1000,
+      currency: "JPY",
+      planId: "native-gold",
+      period: "month",
+      published: true,
+    };
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/admin/store-products",
+          headers: admin,
+          payload: { product, reason: "アプリの月額プランを登録" },
+        })
+      ).statusCode,
+      200,
+    );
+    let expiresAt = new Date(Date.now() + 86400000).toISOString();
+    (f.external as any).storeReady = async () => {};
+    (f.external as any).verifyStore = async () => ({
+      platform: "ios",
+      id: "subscription-1",
+      originalId: "subscription-original",
+      productId: product.productId,
+      accountId: fan.id,
+      purchasedAt: now(),
+      expiresAt,
+      revoked: false,
+      quantity: 1,
+    });
+    const confirmed = await f.app.inject({
+      method: "POST",
+      url: "/api/native/store/verify",
+      headers: native.headers,
+      payload: {
+        platform: "ios",
+        productId: product.productId,
+        proof: "synthetic-subscription-proof",
+      },
+    });
+    assert.equal(confirmed.statusCode, 200, confirmed.body);
+    assert.equal(
+      JSON.parse(
+        (await f.db.all("SELECT profile FROM users WHERE id = ?", [fan.id]))[0]
+          .profile,
+      ).plan,
+      "Native Gold",
+    );
+    const subscription = await get(f.db, "storeSubscription", fan.id);
+    await put(
+      f.db,
+      "storeSubscription",
+      fan.id,
+      { ...subscription, expiresAt: new Date(Date.now() - 1000).toISOString() },
+      fan.id,
+    );
+    await expireStoreMemberships(f.db);
+    assert.equal(
+      JSON.parse(
+        (await f.db.all("SELECT profile FROM users WHERE id = ?", [fan.id]))[0]
+          .profile,
+      ).plan,
+      "Free",
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("native stores reject missing provider verification and forged notifications before granting an entitlement", async () => {
+  const f = await fixture();
+  try {
+    const native = await nativeLogin(f, await f.user());
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/api/native/store/intents",
+      headers: native.headers,
+      payload: { platform: "ios", productId: "not.configured" },
+    });
+    assert.equal(response.statusCode, 503, response.body);
+    assert.equal((await list(f.db, "storeIntents")).length, 0);
+    for (const [url, payload] of [
+      ["apple", { signedPayload: "forged.not-a-real-signature" }],
+      ["google-play", { message: { messageId: "forged", data: "e30=" } }],
+    ] as const) {
+      const result = await f.app.inject({
+        method: "POST",
+        url: `/api/webhooks/${url}`,
+        headers: { "content-type": "application/json" },
+        payload: JSON.stringify(payload),
+      });
+      assert.ok(result.statusCode >= 400, result.body);
+    }
+    assert.equal((await list(f.db, "storeReceipts")).length, 0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("per-schedule reminders respect custom timing, individual opt-out and disabling already queued notifications", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      headers = await f.login(fan),
+      other = await f.user(),
+      admin = await f.login(await f.user("super"), "admin", true),
+      scheduleId = id(),
+      startsAt = new Date(Date.now() + 5 * 60000).toISOString();
+    await put(
+      f.db,
+      "schedules",
+      scheduleId,
+      {
+        id: scheduleId,
+        title: "個別通知設定の配信",
+        date: startsAt.slice(0, 10),
+        time: "20:00",
+        startsAt,
+        plan: "Free",
+        status: "公開",
+        notify: true,
+        reminderMinutes: [5],
+      },
+      undefined,
+    );
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "PUT",
+          url: `/api/schedules/${scheduleId}/reminders`,
+          headers,
+          payload: { minutes: [] },
+        })
+      ).statusCode,
+      200,
+    );
+    await scheduleReminders(f.db);
+    const jobs = await f.db.all("SELECT * FROM jobs WHERE kind = 'push'");
+    assert.ok(jobs.some((j) => JSON.parse(j.payload).userId === other.id));
+    assert.ok(!jobs.some((j) => JSON.parse(j.payload).userId === fan.id));
+    const schedule = await get(f.db, "schedules", scheduleId);
+    await put(f.db, "schedules", scheduleId, { ...schedule, notify: false });
+    await put(
+      f.db,
+      "push",
+      "reminder-test-device",
+      { subscription: { endpoint: "https://push.example.test/synthetic" } },
+      other.id,
+    );
+    await processJobs(f.db, f.external);
+    assert.equal(f.pushed.length, 0);
+    const metadata = await f.app.inject({
+      url: `/api/schedules/${scheduleId}/reminders`,
+      headers,
+    });
+    assert.equal(metadata.json().enabled, false);
+  } finally {
+    await f.close();
+  }
+});
+
+test("private tip messages are recipient-only, public messages hide blocked and refunded senders", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      viewer = await f.user(),
+      recipient = await f.login(official),
+      reader = await f.login(viewer);
+    for (const [key, visibility, refunded] of [
+      ["private", "private", 0],
+      ["public", "public", 0],
+      ["refund", "public", 100],
+    ] as const)
+      await put(
+        f.db,
+        "tips",
+        key,
+        {
+          id: key,
+          userId: fan.id,
+          recipient: official.id,
+          message: key,
+          visibility,
+          paymentStatus: "paid",
+          amount: 100,
+          refunded,
+          at: now(),
+        },
+        fan.id,
+      );
+    assert.deepEqual(
+      (await f.app.inject({ url: "/api/tips/messages", headers: reader }))
+        .json()
+        .map((r: any) => r.message),
+      ["public"],
+    );
+    assert.equal(
+      (
+        await f.app.inject({ url: "/api/tips/messages", headers: recipient })
+      ).json().length,
+      2,
+    );
+    await put(
+      f.db,
+      "blocks",
+      `${viewer.id}_${fan.id}`,
+      { userId: fan.id },
+      viewer.id,
+    );
+    assert.equal(
+      (
+        await f.app.inject({ url: "/api/tips/messages", headers: reader })
+      ).json().length,
+      0,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("new-device logins and password changes queue durable security notices and revoke existing native sessions", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      native = await nativeLogin(f, fan);
+    const login = await f.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: {
+        origin: f.config.origin,
+        "x-mangumi-request": "1",
+        "user-agent": "Synthetic new device",
+      },
+      payload: { email: fan.email, password },
+    });
+    assert.equal(login.statusCode, 200, login.body);
+    assert.equal((await list(f.db, "securityEvents", fan.id)).length, 1);
+    const head = { origin: f.config.origin, "x-mangumi-request": "1" };
+    await f.app.inject({
+      method: "POST",
+      url: "/api/auth/password/request",
+      headers: head,
+      payload: { email: fan.email },
+    });
+    await processJobs(f.db, f.external);
+    const mail = f.sent.find((m) => m.text.includes("/u/U013?token=")),
+      token = new URL(mail.text.match(/https?:\/\/\S+/)[0]).searchParams.get(
+        "token",
+      );
+    const reset = await f.app.inject({
+      method: "POST",
+      url: "/api/auth/password/reset",
+      headers: head,
+      payload: { token, password: "Changed-synthetic-password-42!" },
+    });
+    assert.equal(reset.statusCode, 200, reset.body);
+    assert.equal(
+      (await f.app.inject({ url: "/api/me/sessions", headers: native.headers }))
+        .statusCode,
+      401,
+    );
+    await processJobs(f.db, f.external);
+    assert.ok(f.sent.some((m) => m.subject.includes("パスワード")));
+    assert.equal((await list(f.db, "securityEvents", fan.id)).length, 2);
+  } finally {
+    await f.close();
+  }
+});
+
 test("operational alerts enforce role, thresholds, cooldown, recovery and durable mail delivery", async () => {
   const f = await fixture();
   try {

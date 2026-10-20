@@ -7,6 +7,7 @@ export type Schedule = {
   important?: boolean;
   seriesId?: string;
   reminderMinutes?: number[];
+  notify?: boolean;
   id: string;
   title: string;
   date: string;

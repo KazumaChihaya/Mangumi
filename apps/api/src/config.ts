@@ -48,6 +48,18 @@ export function config(env: NodeJS.ProcessEnv = process.env) {
     vapidPublic: env.VAPID_PUBLIC_KEY ?? "",
     vapidPrivate: env.VAPID_PRIVATE_KEY ?? "",
     vapidSubject: env.VAPID_SUBJECT ?? "",
+    expoAccessToken: env.EXPO_ACCESS_TOKEN ?? "",
+    appleBundleId: env.APPLE_BUNDLE_ID ?? "",
+    appleTeamId: env.APPLE_TEAM_ID ?? "",
+    appleAppId: env.APPLE_APP_ID ? Number(env.APPLE_APP_ID) : undefined,
+    appleEnvironment: env.APPLE_ENVIRONMENT ?? "Production",
+    appleRootCertificates: env.APPLE_ROOT_CERTIFICATES ?? "",
+    googlePackage: env.GOOGLE_PLAY_PACKAGE ?? "",
+    androidCertificateHashes: (env.ANDROID_CERT_SHA256 ?? "")
+      .split(",")
+      .filter((v) => /^(?:[A-Fa-f0-9]{2}:){31}[A-Fa-f0-9]{2}$/.test(v)),
+    googleNotificationAudience: env.GOOGLE_NOTIFICATION_AUDIENCE ?? "",
+    googleNotificationEmail: env.GOOGLE_NOTIFICATION_EMAIL ?? "",
     stripeKey: env.STRIPE_SECRET_KEY ?? "",
     stripeWebhook: env.STRIPE_WEBHOOK_SECRET ?? "",
     livekitUrl: env.LIVEKIT_URL ?? "",

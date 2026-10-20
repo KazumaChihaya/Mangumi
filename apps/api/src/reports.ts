@@ -25,7 +25,7 @@ export function registerReports(
     const rows = [
       ...(await list(db, "tips"))
         .filter((t) =>
-          ["paid", "refunded", "disputed"].includes(t.paymentStatus),
+          ["paid", "refunded", "disputed"].includes(t.paymentStatus) && (!t.provider || t.provider === "stripe"),
         )
         .map((t) => ({
           id: t.id,
@@ -68,7 +68,7 @@ export function registerReports(
         endExclusive: true,
       },
       definitions:
-        "成功した決済を対象。返金額と確定した決済手数料を控除。手数料の取得待ちがある場合、差引額は未確定です。期間終了は指定日時を含みません。",
+        "Web決済の成功分を対象。返金額と確定した決済手数料を控除。手数料の取得待ちがある場合、差引額は未確定です。ストア購入とコイン使用は別欄に表示し、二重計上しません。期間終了は指定日時を含みません。",
       total: summary(rows),
       recipients: [...new Set(rows.map((r) => r.recipient))].map(
         (recipient) => ({
@@ -77,6 +77,8 @@ export function registerReports(
         }),
       ),
       rows,
+      storePurchases:(await list(db,"storeReceipts")).filter(inPeriod).map(r=>({id:r.id,platform:r.platform,productId:r.productId,kind:r.kind,amount:r.amount,currency:r.currency,amountSource:r.amountSource,revoked:r.revoked,at:r.at,fee:null})),
+      coinTips:(await list(db,"tips")).filter(t=>t.provider && t.provider!=="stripe" && t.paymentStatus==="paid" && inPeriod(t) && (!query.recipient || t.recipient===query.recipient)).map(t=>({id:t.id,at:t.at,recipient:t.recipient,coins:t.amount,status:t.status})),
     };
   });
   app.get("/api/admin/story-analytics", async (request) => {

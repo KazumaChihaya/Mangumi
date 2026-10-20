@@ -1,4 +1,5 @@
 import type { DemoState } from "./model";
+import { nativeHost, nativeCall } from "./native-bridge";
 
 export const apiBase = process.env.EXPO_PUBLIC_API_URL ?? "";
 export const liveMode = !!apiBase;
@@ -24,6 +25,12 @@ export async function api<T = any>(
   area = currentArea(),
   key?: string,
 ): Promise<T> {
+  if (nativeHost() && area === "member") {
+    if (path === "/billing/checkout") return nativeCall("billing.checkout", body);
+    if (path === "/billing/portal") return nativeCall("billing.manage");
+    if (path === "/billing/cancel") { await nativeCall("billing.manage"); throw new Error("ストアの契約管理で解約してください。結果はストアからの通知後に反映されます"); }
+    if (path === "/auth/logout" && method === "POST") await nativeCall("session.logout");
+  }
   const fingerprint = key
     ? `${area}:${method}:${path}:${JSON.stringify(body)}`
     : "";

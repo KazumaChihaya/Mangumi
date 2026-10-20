@@ -199,6 +199,11 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
                   timezone: v.timezone,
                   category: v.category,
                   important: v.important === "重要",
+                  notify: v.notify !== "通知しない",
+                  reminderMinutes: v.reminderMinutes
+                    .split(/[,、\s]+/)
+                    .filter(Boolean)
+                    .map(Number),
                   ...(v.publishAt
                     ? { publishAt: new Date(v.publishAt).toISOString() }
                     : {}),
@@ -284,6 +289,17 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
             value={selected?.timezone ?? "Asia/Tokyo"}
           />
           <Field name="category" label="カテゴリ" value={selected?.category} />
+          <Select
+            name="notify"
+            label="自動リマインダー"
+            options={["通知する", "通知しない"]}
+            value={selected?.notify === false ? "通知しない" : "通知する"}
+          />
+          <Field
+            name="reminderMinutes"
+            label="通知する何分前か（カンマ区切り・最大5件／空欄は既定）"
+            value={selected?.reminderMinutes?.join(", ") ?? ""}
+          />
           <Select
             name="important"
             label="重要表示"

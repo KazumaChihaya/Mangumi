@@ -198,7 +198,7 @@ export function registerOperations(
       ).length,
       revenue: ["super", "finance"].includes(actor.user.role)
         ? tips
-            .filter((tip) => tip.paymentStatus === "paid")
+            .filter((tip) => tip.paymentStatus === "paid" && (!tip.provider || tip.provider === "stripe"))
             .reduce((total, tip) => total + tip.amount - (tip.refunded ?? 0), 0)
         : null,
       definitions: {
@@ -206,7 +206,7 @@ export function registerOperations(
           "直近30日にログイン利用があり、停止されていない一般会員（管理者・公式配信者を除く）",
         notificationOptInRate:
           "アクティブ会員のうち、有効な通知端末を1台以上持つ会員の割合",
-        revenue: "決済成功の金額から返金額を差し引いた累計額（手数料控除前）",
+        revenue: "Web決済成功の金額から返金額を差し引いた累計額（手数料控除前）。ストア購入とコインの使用は売上管理の別欄を参照",
       },
     };
   });

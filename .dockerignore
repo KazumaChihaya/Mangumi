@@ -11,3 +11,6 @@
 !.env.example
 **/*.sqlite*
 **/*.log
+.secrets
+apps/native/android
+apps/native/ios

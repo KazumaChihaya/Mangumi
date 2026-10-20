@@ -7,6 +7,17 @@ import { campaignSchema } from "./campaigns.ts";
 import { installGuideSchema } from "./install-guides.ts";
 import { qualitySchema, alertPolicySchema } from "./monitoring.ts";
 import { checkoutSchema } from "./checkout.ts";
+import {
+  nativeLinkSchema,
+  nativeExchangeSchema,
+  nativeRefreshSchema,
+} from "./native-auth.ts";
+import {
+  storeProductSchema,
+  storeIntentSchema,
+  storeVerifySchema,
+} from "./stores.ts";
+import { reminderSchema } from "./reminders.ts";
 import { featurePolicySchema } from "./limits.ts";
 import { featureDefinitionSchema } from "./features.ts";
 import { emailTemplateSchema } from "./email.ts";
@@ -23,6 +34,32 @@ const empty = object({}),
   ok = object({ ok: z.boolean() });
 const reasons = object({ reason });
 const bodies: Record<string, z.ZodType> = {
+  "PUT /api/schedules/{id}/reminders": reminderSchema,
+  "POST /api/native/link": nativeLinkSchema,
+  "POST /api/native/exchange": nativeExchangeSchema,
+  "POST /api/native/refresh": nativeRefreshSchema,
+  "POST /api/native/web-ticket": object({
+    path: s
+      .max(500)
+      .regex(/^\/(?!\/)[^\\\r\n]*$/)
+      .default("/"),
+    nonce: s.min(20).max(100),
+  }),
+  "POST /api/native/web-login": object({
+    ticket: s.min(32).max(100),
+    nonce: s.min(20).max(100),
+  }),
+  "POST /api/native/push": object({
+    token: s.max(300),
+    label: s.min(1).max(100),
+  }),
+  "POST /api/native/store/intents": storeIntentSchema,
+  "POST /api/native/store/verify": storeVerifySchema,
+  "POST /api/native/tips": storeIntentSchema.shape.tip.unwrap(),
+  "POST /api/admin/store-products": object({
+    product: storeProductSchema,
+    reason,
+  }),
   "POST /api/admin/monitoring": object({ policy: alertPolicySchema, reason }),
   "POST /api/admin/features": object({
     feature: featureDefinitionSchema,
@@ -315,6 +352,12 @@ export function apiSpecification(raw: any) {
     Problem: toSchema(object({ code: s, message: s })),
   };
   doc.components.securitySchemes = {
+    nativeBearer: {
+      type: "http",
+      scheme: "bearer",
+      description:
+        "インストール先に紐付く短期アクセストークン。SecureStoreの更新トークンで更新。WebViewには渡しません。",
+    },
     memberCookie: {
       type: "apiKey",
       in: "cookie",
@@ -336,12 +379,19 @@ export function apiSpecification(raw: any) {
       ];
       operation.summary = key;
       const publicRoute =
-        /^\/api\/(health|readiness|config|features|openapi.json|brand(?:\/icon\/\{size\})?|install-guides|auth\/(register|login|resend|verify|password\/(request|reset))|admin\/auth\/login|webhooks\/(stripe|livekit))$/.test(
+        /^\/api\/(health|readiness|config|features|openapi.json|brand(?:\/icon\/\{size\})?|install-guides|auth\/(register|login|resend|verify|password\/(request|reset))|admin\/auth\/login|native\/(exchange|refresh|web-login)|webhooks\/(stripe|livekit|apple|google-play))$/.test(
           path,
-        ) || path === "/manifest.json";
+        ) ||
+        path === "/manifest.json" ||
+        path.startsWith("/.well-known/");
       operation.security = publicRoute
         ? []
-        : [{ [path.includes("/admin/") ? "adminCookie" : "memberCookie"]: [] }];
+        : path.includes("/admin/")
+          ? [{ adminCookie: [] }]
+          : path.startsWith("/api/native/") &&
+              !["/api/native/link", "/api/native/store/catalog"].includes(path)
+            ? [{ nativeBearer: [] }]
+            : [{ memberCookie: [] }, { nativeBearer: [] }];
       operation.parameters = [
         ...(path.match(/\{[^}]+\}/g) ?? []).map((p: string) => ({
           name: p.slice(1, -1),

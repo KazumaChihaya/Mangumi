@@ -13,8 +13,10 @@ import {
   RouteLink,
   Select,
 } from "../ui";
+import { nativeHost,nativeCall } from "../native-bridge";
 
 export async function enablePush() {
+  if (nativeHost()) { await nativeCall("push.enable"); return; }
   const ios =
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);

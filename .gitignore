@@ -13,3 +13,6 @@ playwright-report/
 .env.*
 !.env.example
 *.tsbuildinfo
+.secrets/
+apps/native/android/
+apps/native/ios/

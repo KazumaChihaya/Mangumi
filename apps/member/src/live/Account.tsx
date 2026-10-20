@@ -10,6 +10,7 @@ import {
   Notice,
   Panel,
   Row,
+  Select,
   Table,
   Toggle,
 } from "../ui";
@@ -18,6 +19,8 @@ import { useResource } from "./hooks";
 import { enablePush } from "./Auth";
 import { saveJson } from "./Members";
 import { request } from "../generated/api-client";
+import { nativeHost } from "../native-bridge";
+import { NativeStoreAccount } from "./Native";
 
 export function LiveAccount({ screen }: { screen: Screen }) {
   const { state, refresh, notify, update } = useStore();
@@ -149,7 +152,12 @@ export function LiveAccount({ screen }: { screen: Screen }) {
     return (
       <>
         {state.plans.map((plan) => (
-          <Panel key={plan.id} title={`${plan.name} · ${yen(plan.price)}/月`}>
+          <Panel
+            key={plan.id}
+            title={
+              nativeHost() ? plan.name : `${plan.name} · ${yen(plan.price)}/月`
+            }
+          >
             <ul>
               {plan.features.map((feature) => (
                 <li key={feature}>{feature}</li>
@@ -169,12 +177,22 @@ export function LiveAccount({ screen }: { screen: Screen }) {
                   checkout({ kind: "plan", planId: plan.id, period: "year" })
                 }
               >
-                年額 {yen((plan as any).yearPrice)}で申し込む
+                {nativeHost()
+                  ? "年額プランのストア価格を確認"
+                  : `年額 ${yen((plan as any).yearPrice)}で申し込む`}
               </Button>
             )}
           </Panel>
         ))}
-        {billing.data?.subscription && (
+        <NativeStoreAccount />
+        {!nativeHost() &&
+          billing.data?.storeSubscription?.status === "active" && (
+            <Notice>
+              このプランはアプリストアで契約されています。更新や解約はApp
+              Store／Google Playの契約管理で行ってください。
+            </Notice>
+          )}
+        {!nativeHost() && billing.data?.subscription && (
           <Panel title="契約管理">
             <p>{billing.data.subscription.status}</p>
             <p>
@@ -316,7 +334,9 @@ export function LiveAccount({ screen }: { screen: Screen }) {
           rows={(billing.data?.tips ?? []).map((tip: any) => [
             new Date(tip.at).toLocaleString("ja-JP"),
             "マン組への応援",
-            yen(tip.amount),
+            ["ios", "android", "native-coins"].includes(tip.provider)
+              ? `${tip.amount}コイン`
+              : yen(tip.amount),
             tip.status,
           ])}
         />
@@ -418,6 +438,7 @@ export function LivePayments({ screen }: { screen: Screen }) {
   const officials = useResource<any[]>("/officials", 0);
   const billing = useResource("/billing/status");
   const config = useResource("/config", 0);
+  const messages = useResource<any[]>("/tips/messages");
   return (
     <>
       {config.data?.billingEnabled ? (
@@ -432,6 +453,10 @@ export function LivePayments({ screen }: { screen: Screen }) {
                   amount: Number(values.amount),
                   recipient: values.recipient,
                   message: values.message,
+                  visibility:
+                    values.visibility === "ニックネームとメッセージを公開"
+                      ? "public"
+                      : "private",
                 },
                 area: "member",
                 key: crypto.randomUUID(),
@@ -462,12 +487,14 @@ export function LivePayments({ screen }: { screen: Screen }) {
                     tone="ghost"
                     onClick={() => setAmount(String(n))}
                   >
-                    {yen(n)}
+                    {nativeHost() ? `${n}コイン` : yen(n)}
                   </Button>
                 ))}
             </div>
             <label className="field">
-              <span>応援金額（円）</span>
+              <span>
+                {nativeHost() ? "使用する応援コイン" : "応援金額（円）"}
+              </span>
               <input
                 name="amount"
                 type="number"
@@ -479,6 +506,17 @@ export function LivePayments({ screen }: { screen: Screen }) {
               />
             </label>
             <Field name="message" label="応援メッセージ" multiline />
+            <Select
+              name="visibility"
+              label="メッセージの公開範囲"
+              options={["受取人と運営のみ", "ニックネームとメッセージを公開"]}
+              value="受取人と運営のみ"
+            />
+            {nativeHost() && (
+              <Notice>
+                コインが不足する場合は、ストアの価格を確認して購入します。コインをガチャやプラン権限へ利用することはできません。
+              </Notice>
+            )}
             <Notice>
               お支払い後、結果の反映までしばらくかかることがあります。
             </Notice>
@@ -492,38 +530,58 @@ export function LivePayments({ screen }: { screen: Screen }) {
           />
         </Panel>
       )}
-      <Panel title="お支払い方法">
-        {billing.data?.paymentMethod && (
-          <p>
-            {billing.data.paymentMethod.brand} ····{" "}
-            {billing.data.paymentMethod.last4}
-          </p>
-        )}
-        <Button
-          onClick={async () => {
-            const result = await api(
-              "/billing/checkout",
-              { kind: "setup" },
-              "POST",
-              "member",
-              crypto.randomUUID(),
-            );
-            window.location.assign(result.url);
-          }}
-        >
-          カードを登録する
-        </Button>
-        {billing.error && <Notice>{billing.error}</Notice>}
-      </Panel>
+      {nativeHost() ? (
+        <NativeStoreAccount />
+      ) : (
+        <Panel title="お支払い方法">
+          {billing.data?.paymentMethod && (
+            <p>
+              {billing.data.paymentMethod.brand} ····{" "}
+              {billing.data.paymentMethod.last4}
+            </p>
+          )}
+          <Button
+            onClick={async () => {
+              const result = await api(
+                "/billing/checkout",
+                { kind: "setup" },
+                "POST",
+                "member",
+                crypto.randomUUID(),
+              );
+              window.location.assign(result.url);
+            }}
+          >
+            カードを登録する
+          </Button>
+          {billing.error && <Notice>{billing.error}</Notice>}
+        </Panel>
+      )}
       <Panel title="応援履歴">
         <Table
           columns={["日時", "金額", "状態"]}
           rows={(billing.data?.tips ?? []).map((tip: any) => [
             new Date(tip.at).toLocaleString("ja-JP"),
-            yen(tip.amount),
+            ["ios", "android", "native-coins"].includes(tip.provider)
+              ? `${tip.amount}コイン`
+              : yen(tip.amount),
             tip.status,
           ])}
         />
+      </Panel>
+      <Panel title="応援メッセージ">
+        {messages.error && <Notice>{messages.error}</Notice>}
+        {!messages.data?.length && (
+          <p>公開された応援メッセージはまだありません。</p>
+        )}
+        {messages.data?.map((item) => (
+          <Row
+            key={item.id}
+            title={`${item.name}さん${item.own && item.visibility !== "public" ? "（自分宛て・非公開）" : ""}`}
+            sub={item.message || "応援ありがとうございます！"}
+            end={<small>{new Date(item.at).toLocaleDateString("ja-JP")}</small>}
+          />
+        ))}
       </Panel>
     </>
   );
