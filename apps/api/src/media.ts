@@ -14,6 +14,8 @@ import { identity, permit } from "./auth.ts";
 import type { Config } from "./config.ts";
 import { fail, id, now, once } from "./security.ts";
 import { planLimits, entitled, contentVisible } from "./domain.ts";
+import { featurePolicy } from "./limits.ts";
+import { availableCampaigns, campaignOdds } from "./campaigns.ts";
 
 async function probeDuration(info: any, path: string): Promise<number> {
   const duration = Number(info.format?.duration);
@@ -216,6 +218,15 @@ export function registerMedia(
       });
       if (!upload) fail(400, "ファイルを選んでください");
       const data = await upload.toBuffer();
+      if (query.kind === "audio") {
+        const account = (
+          await db.all<any>("SELECT * FROM users WHERE id = ?", [owner])
+        )[0];
+        const policy =
+          account && (await featurePolicy(db, account, "dm.audio.send"));
+        if (policy?.bytes && data.length > policy.bytes)
+          fail(413, "プランの音声容量上限を超えています");
+      }
       const mediaId = id();
       await mkdir(config.files, { recursive: true });
       let output = data,
@@ -291,6 +302,11 @@ export function registerMedia(
             await db.all("SELECT * FROM users WHERE id = ?", [owner])
           )[0];
           const limits = account ? await planLimits(db, account as any) : {};
+          const policy = account
+            ? await featurePolicy(db, account as any, "dm.audio.send")
+            : undefined;
+          if (policy?.seconds && duration! > policy.seconds)
+            fail(400, "プランの録音時間上限を超えています");
           const maximum = Math.min(
             settings.audioSeconds,
             limits.audioSeconds ?? 300,
@@ -441,9 +457,16 @@ export function registerMedia(
         );
         const odds = await get(db, "probabilities", "current"),
           campaign = await get(db, "gacha", "global");
-        const rewardPreview =
+        let rewardPreview =
           campaign.status === "公開" &&
           odds.items.some((prize: any) => prize.image === url);
+        for (const item of await availableCampaigns(db, actor.user))
+          if (
+            (await campaignOdds(db, item))?.items.some(
+              (prize: any) => prize.image === url,
+            )
+          )
+            rewardPreview = true;
         const owned = (await list(db, "draws", actor.user.id)).some(
           (draw) => draw.image === url,
         );

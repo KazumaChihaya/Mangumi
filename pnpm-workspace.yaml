@@ -1,5 +1,9 @@
 packages:
   - apps/*
+overrides:
+  "uuid@<11.1.1": "11.1.1"
+  decode-uri-component: "0.5.0"
+  "tinypool@<2.1.2": "2.1.2"
 minimumReleaseAgeExclude:
   - "@expo/cli@57.0.29"
   - "@expo/fingerprint@0.20.14"
@@ -20,3 +24,7 @@ allowBuilds:
   "@ffprobe-installer/linux-arm64": true
   "@ffprobe-installer/darwin-x64": true
   "@ffprobe-installer/darwin-arm64": true
+patchedDependencies:
+  braces@3.0.3: patches/braces@3.0.3.patch
+  decode-uri-component@0.5.0: patches/decode-uri-component@0.5.0.patch
+  node-forge@1.4.0: patches/node-forge@1.4.0.patch

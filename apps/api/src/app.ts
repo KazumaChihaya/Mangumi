@@ -48,9 +48,20 @@ import {
   notifyAudience,
   processJobs,
   scheduleReminders,
+  scheduleEngagement,
 } from "./jobs.ts";
 import { registerOperations } from "./operations.ts";
 import { registerMembers } from "./members.ts";
+import { registerNotifications } from "./notifications.ts";
+import { registerRetention, runRetention } from "./retention.ts";
+import { registerReports } from "./reports.ts";
+import { registerGachaVersions } from "./gacha-versions.ts";
+import { registerCampaigns } from "./campaigns.ts";
+import { registerInstallGuides } from "./install-guides.ts";
+import { registerMonitoring, maintenanceSweep } from "./monitoring.ts";
+import { apiSpecification } from "./openapi.ts";
+import { registerFeatures } from "./features.ts";
+import { registerEmailTemplates } from "./email.ts";
 
 export async function createApp(
   options: {
@@ -231,13 +242,22 @@ export async function createApp(
       providers: readiness(),
     };
   });
-  app.get("/api/openapi.json", async () => app.swagger());
+  app.get("/api/openapi.json", async () => apiSpecification(app.swagger()));
   registerAuth(app, db, config);
   registerMedia(app, db, config);
   registerSocial(app, db, config, external);
   registerBilling(app, db, config, external);
   registerOperations(app, db, config);
   registerMembers(app, db, config);
+  registerNotifications(app, db, config);
+  registerRetention(app, db, config);
+  registerReports(app, db, config);
+  registerGachaVersions(app, db, config);
+  registerCampaigns(app, db, config);
+  registerInstallGuides(app, db, config);
+  const checkAlerts = registerMonitoring(app, db, config);
+  registerFeatures(app, db, config);
+  registerEmailTemplates(app, db, config);
   app.get("/api/state", async (request) =>
     db.transaction(async (q) => {
       const area =
@@ -252,7 +272,13 @@ export async function createApp(
         )
           throw error;
       }
-      const state = await snapshot(q, actor);
+      const state = await snapshot(
+        q,
+        actor,
+        z
+          .object({ campaign: z.string().max(100).default("global") })
+          .parse(request.query).campaign,
+      );
       return {
         state,
         area,
@@ -279,7 +305,13 @@ export async function createApp(
         () => mutate(q, actor, request.body, request.ip),
       );
       return {
-        state: await snapshot(q, actor),
+        state: await snapshot(
+          q,
+          actor,
+          z
+            .object({ campaign: z.string().max(100).default("global") })
+            .parse(request.query).campaign,
+        ),
         role: actor.user.role,
         userId: actor.user.id,
       };
@@ -288,8 +320,11 @@ export async function createApp(
   app.post("/api/gacha/draw", async (request) =>
     db.transaction(async (q) => {
       const actor = await identity(q, request, config, "member");
-      const { count } = z
-        .object({ count: z.number().int().min(1).max(10) })
+      const { count, campaignId } = z
+        .object({
+          count: z.number().int().min(1).max(10),
+          campaignId: z.string().max(100).default("global"),
+        })
         .strict()
         .parse(request.body);
       return draw(
@@ -297,6 +332,7 @@ export async function createApp(
         actor,
         count,
         String(request.headers["idempotency-key"] ?? ""),
+        campaignId,
       );
     }),
   );
@@ -304,9 +340,17 @@ export async function createApp(
     db.transaction(async (q) => {
       const actor = await identity(q, request, config, "member");
       await entitled(q, actor.user, "gacha.draw");
-      const campaign = await get(q, "gacha", "global"),
+      const { campaignId } = z
+        .object({ campaignId: z.string().max(100).default("global") })
+        .parse(request.body ?? {});
+      const campaign = await get(
+          q,
+          campaignId === "global" ? "gacha" : "gachaCampaigns",
+          campaignId,
+        ),
         today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
       if (
+        !campaign ||
         campaign.status !== "公開" ||
         today < campaign.start ||
         today > campaign.end ||
@@ -323,9 +367,9 @@ export async function createApp(
         q,
         `daily-ticket:${actor.user.id}`,
         String(request.headers["idempotency-key"] ?? ""),
-        { day: today },
+        { day: today, campaignId },
         async () => {
-          const claimId = `${actor.user.id}_${today}`;
+          const claimId = `${actor.user.id}_${campaignId}_${today}`;
           if (await get(q, "dailyClaims", claimId))
             fail(409, "本日の無料チケットは受け取り済みです");
           const wallet = (await get(q, "wallet", actor.user.id)) ?? {
@@ -543,6 +587,7 @@ export async function createApp(
         userId,
       ]);
       await q.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+      await enqueue(q, `role:${userId}:${id()}`, "voice_kick_user", { userId });
       await audit(
         q,
         actor.user.id,
@@ -554,54 +599,6 @@ export async function createApp(
         request.ip,
       );
       return { ok: true };
-    }),
-  );
-  app.post("/api/admin/notifications", async (request) =>
-    db.transaction(async (q) => {
-      const actor = await identity(q, request, config, "admin");
-      permit(actor, ["super", "content"]);
-      const body = z
-        .object({
-          title: z.string().min(1).max(100),
-          body: z.string().min(1).max(500),
-          plan: z.string().max(80).default("Free"),
-          scheduledAt: z.iso.datetime().optional(),
-        })
-        .strict()
-        .parse(request.body);
-      return once(
-        q,
-        `campaign:${actor.user.id}`,
-        String(request.headers["idempotency-key"] ?? ""),
-        body,
-        async () => {
-          const campaignId = id();
-          await enqueue(
-            q,
-            campaignId,
-            "campaign",
-            { ...body, id: campaignId },
-            body.scheduledAt ?? now(),
-          );
-          await put(q, "campaigns", campaignId, {
-            id: campaignId,
-            title: body.title,
-            status: "予約",
-            count: 0,
-          });
-          await audit(
-            q,
-            actor.user.id,
-            "notification.schedule",
-            campaignId,
-            null,
-            body,
-            "運営通知",
-            request.ip,
-          );
-          return { id: campaignId };
-        },
-      );
     }),
   );
   app.get("/api/admin/operations", async (request) => {
@@ -724,7 +721,11 @@ export async function createApp(
         };
         let contents: Buffer | string = await readFile(path);
         if (extname(path) === ".html") {
-          const brand = await get(db, "brand", "current");
+          const brand = (await get(db, "brand", "current")) ?? {
+            name: (await get(db, "settings", "global"))?.name ?? "まんぞうラブ",
+            description:
+              "マン組の公式ファンアプリ。配信、スペース、DM、ストーリーを楽しめます。",
+          };
           if (brand) {
             const escape = (value: string) =>
               value.replace(
@@ -740,6 +741,10 @@ export async function createApp(
               );
             contents = contents
               .toString()
+              .replace(
+                /<title\b[^>]*>[\s\S]*?<\/title>/i,
+                `<title>${escape(brand.name)}</title>`,
+              )
               .replace(/<meta name="description"[^>]*>/, "");
             contents = contents.replace(
               "</head>",
@@ -768,7 +773,11 @@ export async function createApp(
     ? setInterval(() => {
         if (!active)
           active = scheduleReminders(db)
+            .then(() => scheduleEngagement(db))
             .then(() => processJobs(db, external))
+            .then(() => runRetention(db, config))
+            .then(() => checkAlerts())
+            .then(() => maintenanceSweep(db, external))
             .catch((error) =>
               app.log.error(
                 { code: error.code ?? "worker_failed" },

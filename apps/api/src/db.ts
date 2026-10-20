@@ -8,6 +8,20 @@ export interface Query {
   all<T = Record<string, any>>(sql: string, params?: any[]): Promise<T[]>;
   run(sql: string, params?: any[]): Promise<void>;
 }
+function transactionQuery(source: Query): Query {
+  const reads = new Map<string, any[]>();
+  return {
+    all: async <T = Record<string, any>>(sql: string, params: any[] = []) => {
+      const key = JSON.stringify([sql, params]);
+      if (!reads.has(key)) reads.set(key, await source.all(sql, params));
+      return structuredClone(reads.get(key)) as T[];
+    },
+    run: async (sql, params = []) => {
+      reads.clear();
+      await source.run(sql, params);
+    },
+  };
+}
 export class Database implements Query {
   private sqlite?: DatabaseSync;
   private pool?: Pool;
@@ -71,6 +85,10 @@ export class Database implements Query {
         before_json TEXT NOT NULL, after_json TEXT NOT NULL, ip TEXT NOT NULL, created_at VARCHAR(30) NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS webhook_events (id VARCHAR(150) PRIMARY KEY, provider VARCHAR(30) NOT NULL,
         processed_at VARCHAR(30) NOT NULL)`,
+      "CREATE INDEX IF NOT EXISTS entities_owner ON entities(resource, owner_id)",
+      "CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id)",
+      "CREATE INDEX IF NOT EXISTS jobs_due ON jobs(state, due_at)",
+      "CREATE INDEX IF NOT EXISTS audit_created ON audit_logs(created_at)",
     ];
     for (const sql of statements) await this.run(sql);
     const lock = await this.all("SELECT id FROM app_lock WHERE id = 1");
@@ -83,7 +101,7 @@ export class Database implements Query {
       const task = this.tail.then(async () => {
         this.sqlite!.exec("BEGIN IMMEDIATE");
         try {
-          const value = await work(this);
+          const value = await work(transactionQuery(this));
           this.sqlite!.exec("COMMIT");
           return value;
         } catch (error) {
@@ -107,7 +125,7 @@ export class Database implements Query {
       await query.run(
         "UPDATE app_lock SET revision = revision + 1 WHERE id = 1",
       );
-      const value = await work(query);
+      const value = await work(transactionQuery(query));
       await connection.commit();
       return value;
     } catch (error) {

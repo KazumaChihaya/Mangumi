@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
 import type { Screen } from "../registry";
@@ -17,6 +17,7 @@ import { yen } from "../model";
 import { useResource } from "./hooks";
 import { enablePush } from "./Auth";
 import { saveJson } from "./Members";
+import { request } from "../generated/api-client";
 
 export function LiveAccount({ screen }: { screen: Screen }) {
   const { state, refresh, notify, update } = useStore();
@@ -61,11 +62,15 @@ export function LiveAccount({ screen }: { screen: Screen }) {
             ["notifySchedule", "配信予定"],
             ["notifyStory", "ストーリー"],
             ["notifyDM", "メッセージ"],
+            ["notifyVoice", "音声ルーム"],
+            ["notifyGacha", "ガチャ"],
+            ["notifyGeneral", "運営のお知らせ"],
+            ["notifySecurity", "セキュリティのお知らせ"],
           ].map(([key, label]) => (
             <Toggle
               key={key}
               label={label}
-              checked={(state.settings as any)[key]}
+              checked={(state.settings as any)[key] !== false}
               onChange={(value) =>
                 update((draft) => {
                   (draft.settings as any)[key] = value;
@@ -172,6 +177,43 @@ export function LiveAccount({ screen }: { screen: Screen }) {
         {billing.data?.subscription && (
           <Panel title="契約管理">
             <p>{billing.data.subscription.status}</p>
+            <p>
+              解約方針：
+              {(
+                state.plans.find(
+                  (p) => p.id === billing.data.subscription.planId,
+                ) as any
+              )?.cancellation === "immediate"
+                ? "解約時に終了"
+                : "支払済み期間の終了まで利用可能"}
+            </p>
+            {!billing.data.subscription.cancelAtPeriodEnd && (
+              <Form
+                submit="契約の解約を申し込む"
+                tone="danger"
+                onSubmit={async () => {
+                  await api(
+                    "/billing/cancel",
+                    { confirmed: true },
+                    "POST",
+                    "member",
+                    crypto.randomUUID(),
+                  );
+                  notify(
+                    "解約を受け付けました。契約状況の更新をお待ちください",
+                  );
+                  await billing.reload();
+                }}
+              >
+                <label className="check-row">
+                  <input type="checkbox" required />
+                  解約方針を確認し、解約を申し込みます
+                </label>
+              </Form>
+            )}
+            {billing.data.subscription.cancelAtPeriodEnd && (
+              <Notice>次回更新時の解約を受け付けています。</Notice>
+            )}
             <Button
               onClick={async () => {
                 const result = await api("/billing/portal", {});
@@ -372,6 +414,7 @@ export function LiveAccount({ screen }: { screen: Screen }) {
 }
 export function LivePayments({ screen }: { screen: Screen }) {
   const { state } = useStore();
+  const [amount, setAmount] = useState("");
   const officials = useResource<any[]>("/officials", 0);
   const billing = useResource("/billing/status");
   const config = useResource("/config", 0);
@@ -382,18 +425,17 @@ export function LivePayments({ screen }: { screen: Screen }) {
           <Form
             submit="お支払いへ進む"
             onSubmit={async (values) => {
-              const result = await api(
-                "/billing/checkout",
-                {
+              const result = await request("post_api_billing_checkout", {
+                params: {},
+                body: {
                   kind: "tip",
                   amount: Number(values.amount),
                   recipient: values.recipient,
                   message: values.message,
                 },
-                "POST",
-                "member",
-                crypto.randomUUID(),
-              );
+                area: "member",
+                key: crypto.randomUUID(),
+              });
               window.location.assign(result.url);
             }}
           >
@@ -407,14 +449,35 @@ export function LivePayments({ screen }: { screen: Screen }) {
                 ))}
               </select>
             </label>
-            <Field
-              name="amount"
-              label="応援金額（円）"
-              type="number"
-              min={100}
-              max={state.settings.tipMax}
-              required
-            />
+            <div className="button-row">
+              {((state.settings as any).tipPresets ?? [500, 1000, 3000])
+                .filter(
+                  (n: number) =>
+                    n <= state.settings.tipMax &&
+                    n >= ((state.settings as any).tipMin ?? 100),
+                )
+                .map((n: number) => (
+                  <Button
+                    key={n}
+                    tone="ghost"
+                    onClick={() => setAmount(String(n))}
+                  >
+                    {yen(n)}
+                  </Button>
+                ))}
+            </div>
+            <label className="field">
+              <span>応援金額（円）</span>
+              <input
+                name="amount"
+                type="number"
+                min={(state.settings as any).tipMin ?? 100}
+                max={state.settings.tipMax}
+                required
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
             <Field name="message" label="応援メッセージ" multiline />
             <Notice>
               お支払い後、結果の反映までしばらくかかることがあります。

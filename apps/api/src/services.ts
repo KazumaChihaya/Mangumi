@@ -48,7 +48,13 @@ export function services(config: Config) {
     stripe,
     roomService,
     receiver,
-    async mail(message: { to: string; subject: string; text: string }) {
+    origin: config.origin,
+    async mail(message: {
+      to: string;
+      subject: string;
+      text: string;
+      html?: string;
+    }) {
       if (mail && config.mailFrom) {
         await mail.sendMail({ ...message, from: config.mailFrom });
         return;

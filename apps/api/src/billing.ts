@@ -1,225 +1,84 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { get, list, put, type Database, type Query } from "./db.ts";
-import { identity, permit, type Identity } from "./auth.ts";
+import { get, list, put, type Database } from "./db.ts";
+import { identity, permit } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Services } from "./services.ts";
 import { audit, fail, id, now, once, unseal, verifyTotp } from "./security.ts";
-import { entitled } from "./domain.ts";
+import { registerCheckout } from "./checkout.ts";
 
 const requestKey = (request: FastifyRequest) =>
   String(request.headers["idempotency-key"] ?? "");
-async function customer(q: Query, actor: Identity, external: Services) {
-  const previous = await get(q, "paymentCustomer", actor.user.id);
-  if (previous) return previous.id;
-  const created = await external
-    .requireStripe()
-    .customers.create(
-      { email: actor.user.email, metadata: { user_id: actor.user.id } },
-      { idempotencyKey: `customer-${actor.user.id}` },
-    );
-  await put(
-    q,
-    "paymentCustomer",
-    actor.user.id,
-    { id: created.id },
-    actor.user.id,
-  );
-  return created.id;
-}
 export function registerBilling(
   app: FastifyInstance,
   db: Database,
   config: Config,
   external: Services,
 ) {
-  app.post("/api/billing/checkout", async (request) =>
-    db.transaction(async (q) => {
+  registerCheckout(app, db, config, external);
+  app.post("/api/billing/cancel", async (request) => {
+    const body = z
+        .object({ confirmed: z.literal(true) })
+        .strict()
+        .parse(request.body),
+      stripe = external.requireStripe();
+    const prepared = await db.transaction(async (q) => {
       const actor = await identity(q, request, config, "member");
-      const settings = await get(q, "settings", "global");
-      if (!settings.billingEnabled)
-        fail(409, "現在、有料決済は受付を停止しています");
-      const body = z
-        .discriminatedUnion("kind", [
-          z
-            .object({
-              kind: z.literal("tip"),
-              amount: z.number().int().min(100),
-              recipient: z.string().min(1).max(100),
-              message: z.string().max(500),
-            })
-            .strict(),
-          z
-            .object({
-              kind: z.literal("plan"),
-              planId: z.string().min(1).max(100),
-              period: z.enum(["month", "year"]).default("month"),
-            })
-            .strict(),
-          z.object({ kind: z.literal("setup") }).strict(),
-        ])
-        .parse(request.body);
       return once(
         q,
-        `checkout:${actor.user.id}`,
+        `cancel:${actor.user.id}`,
         requestKey(request),
         body,
         async () => {
-          const stripe = external.requireStripe();
-          const customerId = await customer(q, actor, external);
-          const returnUrl = new URL("/u/U100", config.origin).href;
-          const common = {
-            customer: customerId,
-            success_url: `${returnUrl}?payment=processing`,
-            cancel_url: `${returnUrl}?payment=cancelled`,
-            client_reference_id: actor.user.id,
+          const subscription = await get(q, "subscription", actor.user.id),
+            reference = await get(q, "paymentCustomer", actor.user.id);
+          if (
+            !subscription ||
+            !["active", "trialing", "past_due"].includes(subscription.status) ||
+            !reference
+          )
+            fail(409, "解約できる契約がありません");
+          const plan = await get(q, "plans", subscription.planId);
+          await audit(
+            q,
+            actor.user.id,
+            "subscription.cancel.request",
+            subscription.id,
+            null,
+            { mode: plan?.cancellation ?? "period_end" },
+            "本人による解約申込",
+            request.ip,
+          );
+          return {
+            id: subscription.id,
+            userId: actor.user.id,
+            customer: reference.id,
+            mode: plan?.cancellation ?? "period_end",
           };
-          let checkout;
-          if (body.kind === "setup") {
-            checkout = await stripe.checkout.sessions.create(
-              {
-                ...common,
-                mode: "setup",
-                currency: "jpy",
-                metadata: { user_id: actor.user.id, purpose: "setup" },
-              },
-              {
-                idempotencyKey: `setup-${actor.user.id}-${requestKey(request)}`,
-              },
-            );
-          } else if (body.kind === "plan") {
-            const plan = await get(q, "plans", body.planId);
-            if (
-              (plan?.opensAt && plan.opensAt > now()) ||
-              (plan?.closesAt && plan.closesAt <= now())
-            )
-              fail(409, "このプランは申込期間外です");
-            if (!plan?.published || !plan.stripePrice || plan.price <= 0)
-              fail(400, "このプランは申込できません");
-            const existing = await get(q, "subscription", actor.user.id);
-            if (
-              existing &&
-              ["active", "trialing", "past_due"].includes(existing.status)
-            )
-              fail(409, "現在のプラン変更・解約は契約管理から行ってください");
-            const priceId =
-              body.period === "year" ? plan.stripeYearPrice : plan.stripePrice;
-            if (!priceId) fail(400, "この支払い期間は未設定です");
-            const price = await stripe.prices.retrieve(priceId);
-            if (
-              !price.active ||
-              price.currency !== "jpy" ||
-              price.unit_amount !==
-                (body.period === "year" ? plan.yearPrice : plan.price) ||
-              price.recurring?.interval !== body.period ||
-              price.recurring.interval_count !== 1
-            )
-              fail(
-                409,
-                "決済サービスの価格と掲載価格が一致していません。運営へお問い合わせください",
-              );
-            checkout = await stripe.checkout.sessions.create(
-              {
-                ...common,
-                mode: "subscription",
-                line_items: [
-                  {
-                    price:
-                      body.period === "year"
-                        ? (plan.stripeYearPrice ??
-                          fail(400, "年額プランが未設定です"))
-                        : plan.stripePrice,
-                    quantity: 1,
-                  },
-                ],
-                subscription_data: {
-                  ...(plan.trialDays && !existing?.trialUsed
-                    ? { trial_period_days: plan.trialDays }
-                    : {}),
-                  metadata: { user_id: actor.user.id, plan_id: plan.id },
-                },
-                metadata: { user_id: actor.user.id, plan_id: plan.id },
-              },
-              {
-                idempotencyKey: `plan-${actor.user.id}-${requestKey(request)}`,
-              },
-            );
-          } else {
-            await entitled(q, actor.user, "tip.send");
-            if (body.amount > settings.tipMax)
-              fail(400, `金額は${settings.tipMax}円までです`);
-            const recipient = (
-              await q.all(
-                "SELECT id FROM users WHERE id = ? AND role = 'official' AND status = 'active'",
-                [body.recipient],
-              )
-            )[0];
-            if (!recipient) fail(400, "受取対象を選んでください");
-            const tips = await list(q, "tips", actor.user.id);
-            const month = now().slice(0, 7),
-              today = now().slice(0, 10);
-            const pending = tips.filter((tip) =>
-              ["pending", "paid"].includes(tip.paymentStatus),
-            );
-            if (
-              pending
-                .filter((tip) => tip.at.startsWith(today))
-                .reduce((total, tip) => total + tip.amount, 0) +
-                body.amount >
-                settings.tipMax * 5 ||
-              pending
-                .filter((tip) => tip.at.startsWith(month))
-                .reduce((total, tip) => total + tip.amount, 0) +
-                body.amount >
-                settings.tipMax * 20
-            )
-              fail(409, "応援金額の期間上限に達しています");
-            const tipId = id();
-            checkout = await stripe.checkout.sessions.create(
-              {
-                ...common,
-                mode: "payment",
-                line_items: [
-                  {
-                    price_data: {
-                      currency: "jpy",
-                      product_data: { name: "マン組への応援" },
-                      unit_amount: body.amount,
-                    },
-                    quantity: 1,
-                  },
-                ],
-                payment_intent_data: {
-                  metadata: { tip_id: tipId, user_id: actor.user.id },
-                  setup_future_usage: "off_session",
-                },
-                metadata: { tip_id: tipId, user_id: actor.user.id },
-              },
-              { idempotencyKey: `tip-${actor.user.id}-${requestKey(request)}` },
-            );
-            await put(
-              q,
-              "tips",
-              tipId,
-              {
-                id: tipId,
-                userId: actor.user.id,
-                amount: body.amount,
-                recipient: body.recipient,
-                message: body.message,
-                status: "決済待ち",
-                paymentStatus: "pending",
-                checkoutId: checkout.id,
-                at: now(),
-              },
-              actor.user.id,
-            );
-          }
-          return { url: checkout.url, sessionId: checkout.id };
         },
       );
-    }),
-  );
+    });
+    const current = await stripe.subscriptions.retrieve(prepared.id);
+    if (
+      current.customer !== prepared.customer ||
+      current.metadata.user_id !== prepared.userId
+    )
+      fail(403, "契約の所有者を確認できません");
+    if (current.status !== "canceled") {
+      const options = {
+        idempotencyKey: `cancel-${prepared.userId}-${requestKey(request)}`,
+      };
+      if (prepared.mode === "immediate")
+        await stripe.subscriptions.cancel(prepared.id, {}, options);
+      else
+        await stripe.subscriptions.update(
+          prepared.id,
+          { cancel_at_period_end: true },
+          options,
+        );
+    }
+    return { accepted: true, mode: prepared.mode };
+  });
   app.post("/api/billing/portal", async (request) => {
     const actor = await identity(db, request, config, "member");
     const reference = await get(db, "paymentCustomer", actor.user.id);
@@ -335,13 +194,91 @@ export function registerBilling(
       fail(400, "Webhookの署名を確認できませんでした");
     }
     const data = event.data.object as any;
+    let charge: any, balance: any;
+    if (
+      ["charge.succeeded", "charge.updated", "charge.refunded"].includes(
+        event.type,
+      )
+    ) {
+      charge = data;
+      if (typeof data.balance_transaction === "string")
+        balance = await stripe.balanceTransactions.retrieve(
+          data.balance_transaction,
+        );
+      else if (data.balance_transaction) balance = data.balance_transaction;
+    }
     await db.transaction(async (q) => {
       if (
         (await q.all("SELECT id FROM webhook_events WHERE id = ?", [event.id]))
           .length
       )
         return;
-      if (event.type === "payment_intent.succeeded") {
+      if (charge) {
+        const tip = (await list(q, "tips")).find(
+          (t) =>
+            t.paymentIntent === charge.payment_intent ||
+            t.id === charge.metadata?.tip_id,
+        );
+        if (tip && charge.currency === "jpy" && charge.amount === tip.amount) {
+          await put(
+            q,
+            "tips",
+            tip.id,
+            {
+              ...tip,
+              chargeId: charge.id,
+              ...(balance ? { providerFee: balance.fee, feeAt: now() } : {}),
+              refunded: Math.max(
+                charge.amount_refunded ?? 0,
+                tip.refunded ?? 0,
+              ),
+              ...(charge.amount_refunded || tip.refunded
+                ? {
+                    status:
+                      Math.max(
+                        charge.amount_refunded ?? 0,
+                        tip.refunded ?? 0,
+                      ) >= tip.amount
+                        ? "返金済み"
+                        : "一部返金",
+                    paymentStatus:
+                      Math.max(
+                        charge.amount_refunded ?? 0,
+                        tip.refunded ?? 0,
+                      ) >= tip.amount
+                        ? "refunded"
+                        : tip.paymentStatus,
+                  }
+                : {}),
+            },
+            tip.userId,
+          );
+        }
+        for (const invoice of await list(q, "invoices"))
+          if (invoice.chargeId === charge.id && balance)
+            await put(q, "invoices", invoice.id, {
+              ...invoice,
+              providerFee: balance.fee,
+              refunded: charge.amount_refunded ?? 0,
+            });
+      } else if (event.type === "invoice.paid") {
+        if (data.currency === "jpy" && data.status === "paid")
+          await put(q, "invoices", data.id, {
+            id: data.id,
+            at: new Date(
+              (data.status_transitions?.paid_at ?? event.created) * 1000,
+            ).toISOString(),
+            customer:
+              typeof data.customer === "string"
+                ? data.customer
+                : data.customer?.id,
+            chargeId:
+              typeof data.charge === "string" ? data.charge : data.charge?.id,
+            amount: data.amount_paid,
+            refunded: 0,
+            status: "paid",
+          });
+      } else if (event.type === "payment_intent.succeeded") {
         const tip = await get(q, "tips", data.metadata?.tip_id);
         if (tip) {
           if (
@@ -350,8 +287,13 @@ export function registerBilling(
             data.metadata.user_id !== tip.userId
           )
             fail(400, "決済内容が一致しません");
-          tip.paymentStatus = "paid";
-          tip.status = "完了";
+          tip.paymentStatus =
+            (tip.refunded ?? 0) >= tip.amount ? "refunded" : "paid";
+          tip.status = tip.refunded
+            ? tip.refunded >= tip.amount
+              ? "返金済み"
+              : "一部返金"
+            : "完了";
           tip.paymentIntent = data.id;
           await put(q, "tips", tip.id, tip, tip.userId);
         }

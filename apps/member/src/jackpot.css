@@ -1107,3 +1107,7 @@ html[data-motion="reduced"] .cabinet-lights i,
 html[data-motion="reduced"] .live-dot {
   animation: none;
 }
+/* Operator-selected colors retain the cabinet artwork and its proportions. */
+.app-background { background-color: var(--brand-background, #050509); }
+.app-background .button.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--brand-button, var(--accent)) 65%, white), var(--brand-button, var(--accent)) 55%, color-mix(in srgb, var(--brand-button, var(--accent)) 65%, #390019)); }
+.table-scroll th button { color: inherit; background: transparent; border: 0; font: inherit; text-align: left; cursor: pointer; }

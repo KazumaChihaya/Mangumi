@@ -23,6 +23,8 @@ export function OfficialStory() {
               status: "公開",
               plan: values.plan,
               highlight: values.highlight === "ハイライトに残す",
+              notify: values.notify === "通知する",
+              ...(values.link ? { link: values.link } : {}),
               ...(values.publishAt
                 ? { publishAt: new Date(values.publishAt).toISOString() }
                 : {}),
@@ -36,6 +38,12 @@ export function OfficialStory() {
         }}
       >
         <Field name="title" label="ストーリーの本文" required multiline />
+        <Field name="link" label="リンク先（HTTPS・任意）" type="url" />
+        <Select
+          name="notify"
+          label="公開時の通知"
+          options={["通知する", "通知しない"]}
+        />
         <label className="field">
           <span>画像・動画</span>
           <input

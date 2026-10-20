@@ -188,6 +188,18 @@ export async function mailToken(
   );
   url.searchParams.set("token", value);
   url.searchParams.set("purpose", purpose);
+  const template = await get(q, "emailTemplates", purpose),
+    brand = await get(q, "brand", "current");
+  const render = (text: string) =>
+    text.replace(
+      /\{\{(url|name|app)\}\}/g,
+      (_, key) =>
+        ({
+          url: url.href,
+          name: JSON.parse(user.profile).name,
+          app: brand?.name ?? "まんぞうラブ",
+        })[key as "url" | "name" | "app"],
+    );
   await q.run(
     "INSERT INTO jobs (id,kind,payload,due_at,state,attempts) VALUES (?,?,?,?,?,0)",
     [
@@ -196,9 +208,14 @@ export async function mailToken(
       JSON.stringify({
         tokenHash: digest(value),
         to: email,
-        subject:
-          purpose === "reset" ? "パスワードを再設定" : "メールアドレスの確認",
-        text: `まんぞうラブの${purpose === "reset" ? "パスワード再設定" : "メール確認"}はこちらです。\n${url.href}\n心当たりがない場合は、このメールを破棄してください。`,
+        subject: template
+          ? render(template.subject)
+          : purpose === "reset"
+            ? "パスワードを再設定"
+            : "メールアドレスの確認",
+        text: template
+          ? render(template.text)
+          : `まんぞうラブの${purpose === "reset" ? "パスワード再設定" : "メール確認"}はこちらです。\n${url.href}\n心当たりがない場合は、このメールを破棄してください。`,
       }),
       now(),
       "pending",
@@ -236,6 +253,13 @@ export function registerAuth(
         )
           fail(409, "このメールアドレスでは登録できません");
         const settings = await get(q, "settings", "global");
+        if (
+          settings.duplicateNicknames === false &&
+          (
+            await q.all<User>("SELECT * FROM users WHERE status = 'active'")
+          ).some((user) => JSON.parse(user.profile).name === body.name)
+        )
+          fail(409, "このニックネームは使用されています");
         if (config.production) {
           const brand = await get(q, "brand", "current");
           if (!brand?.terms || !brand?.privacy || !brand?.contact)

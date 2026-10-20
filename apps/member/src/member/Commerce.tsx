@@ -6,6 +6,7 @@ import { useStore } from "../store";
 import { api, liveMode } from "../api";
 import { validateTip, yen } from "../model";
 import { playCue } from "../sound";
+import { useResource } from "../live/hooks";
 import {
   Badge,
   Button,
@@ -39,7 +40,12 @@ export function Confetti() {
   );
 }
 export function GachaPage({ screen }: { screen: Screen }) {
-  const { state, draw, notify, sound, reduced, refresh } = useStore();
+  const { state, draw, notify, sound, reduced, refresh, selectCampaign } =
+    useStore();
+  const campaigns = useResource<any[]>(
+    liveMode ? "/gacha/campaigns" : undefined,
+    0,
+  );
   const cost = state.gacha.ticketCost ?? 1;
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
   const available =
@@ -451,6 +457,25 @@ export function GachaPage({ screen }: { screen: Screen }) {
         </p>
       </div>
       <Panel>
+        {liveMode && !!campaigns.data?.length && (
+          <label className="field">
+            <span>キャンペーンを選ぶ</span>
+            <select
+              value={state.gacha.id ?? "global"}
+              onChange={(e) =>
+                void selectCampaign(e.target.value).catch((error) =>
+                  notify(error.message),
+                )
+              }
+            >
+              {campaigns.data.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}（{c.start}〜{c.end}）
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {!available && (
           <Notice>
             現在、このプランで参加できるガチャは開催されていません。
@@ -462,7 +487,7 @@ export function GachaPage({ screen }: { screen: Screen }) {
             onClick={async () => {
               await api(
                 "/gacha/daily-tickets",
-                {},
+                { campaignId: state.gacha.id ?? "global" },
                 "POST",
                 "member",
                 crypto.randomUUID(),

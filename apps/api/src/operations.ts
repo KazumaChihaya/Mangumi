@@ -15,6 +15,19 @@ export const brandSchema = z
     short: z.string().min(1).max(20),
     description: z.string().max(300),
     accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    background: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    button: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    logoAlt: z.string().max(100).optional(),
+    notificationIcon: z
+      .string()
+      .regex(/^\/api\/media\/[a-zA-Z0-9-]+$/)
+      .optional(),
     logo: z
       .string()
       .regex(/^\/api\/media\/[a-zA-Z0-9-]+$/)
@@ -51,6 +64,7 @@ export async function publishBrand(q: Query, versionId: string) {
     "ogp",
     "emailLogo",
     "installGuide",
+    "notificationIcon",
   ] as const) {
     const mediaId = version.values[key]?.split("/").at(-1);
     const media = mediaId ? await get(q, "media", mediaId) : undefined;
@@ -61,6 +75,8 @@ export async function publishBrand(q: Query, versionId: string) {
     ...settings,
     name: version.values.name,
     accent: version.values.accent,
+    background: version.values.background,
+    button: version.values.button,
   });
   await put(q, "brand", "current", {
     ...version.values,
@@ -296,6 +312,7 @@ export function registerOperations(
       report.status = body.action === "dismiss" ? "却下" : "対応済み";
       report.assignee = actor.user.id;
       report.decision = body;
+      report.resolvedAt = now();
       await put(q, "reports", report.id, report, report.reporter);
       await audit(
         q,
@@ -377,6 +394,7 @@ export function registerOperations(
         "ogp",
         "emailLogo",
         "installGuide",
+        "notificationIcon",
       ] as const)
         if (
           body.values[key] &&
@@ -452,7 +470,7 @@ export function registerOperations(
         scope: "/",
         display: "standalone",
         theme_color: brand.accent ?? settings.accent,
-        background_color: "#08030b",
+        background_color: brand.background ?? "#08030b",
         icons: [192, 512].map((size) => ({
           src: `/api/brand/icon/${size}?v=${brand.version ?? "initial"}`,
           sizes: `${size}x${size}`,

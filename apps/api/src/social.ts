@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { consume, featurePolicy } from "./limits.ts";
 import { TrackSource } from "livekit-server-sdk";
 import { get, list, put, remove, type Database, type Query } from "./db.ts";
 import { audit, digest, fail, id, now, once } from "./security.ts";
@@ -59,6 +60,16 @@ export function registerSocial(
     db.transaction(async (q) => {
       const actor = await identity(q, request, config, "member");
       if (actor.user.role !== "official") fail(403, "公式配信者専用の機能です");
+      await entitled(q, actor.user, "story.view");
+      await consume(q, actor.user, "story.view", {
+        level: "create",
+        created:
+          (await list(q, "stories")).filter(
+            (s) =>
+              s.authorId === actor.user.id &&
+              (!s.expiresAt || s.expiresAt > now()),
+          ).length + 1,
+      });
       const body = storySchema
         .omit({ id: true, authorId: true, viewed: true })
         .parse(request.body);
@@ -112,10 +123,23 @@ export function registerSocial(
           plan: z.string().max(80),
           startsAt: z.iso.datetime().optional(),
           maxSpeakers: z.number().int().min(1).max(20).default(8),
+          maxMinutes: z.number().int().min(1).max(1440).default(120),
+          maxListeners: z.number().int().min(1).max(10000).optional(),
+          description: z.string().max(5000).optional(),
+          visibility: z.enum(["public", "plan", "invite"]).default("public"),
+          invited: z.array(z.string().max(100)).max(1000).default([]),
+          reactions: z.boolean().default(true),
         })
         .strict()
         .parse(request.body);
       await entitled(q, actor.user, "voice.create");
+      await consume(q, actor.user, "voice.create", {
+        level: "create",
+        created:
+          (await list(q, "rooms")).filter(
+            (r) => r.hostId === actor.user.id && r.status !== "終了",
+          ).length + 1,
+      });
       if (
         !(await list(q, "plans")).some(
           (plan) => plan.name === body.plan && plan.published,
@@ -129,6 +153,9 @@ export function registerSocial(
         hostId: actor.user.id,
         listeners: 0,
         status: body.startsAt && body.startsAt > now() ? "開催予定" : "開催中",
+        ...(!body.startsAt || body.startsAt <= now()
+          ? { startedAt: now() }
+          : {}),
       };
       await put(q, "rooms", room.id, room);
       await audit(
@@ -156,7 +183,11 @@ export function registerSocial(
         fail(403, "ホストのみ開始できます");
       if (room.status !== "開催予定")
         fail(409, "開催予定のルームのみ開始できます");
-      await put(q, "rooms", room.id, { ...room, status: "開催中" });
+      await put(q, "rooms", room.id, {
+        ...room,
+        status: "開催中",
+        startedAt: now(),
+      });
       return { ok: true };
     }),
   );
@@ -169,6 +200,8 @@ export function registerSocial(
         const room = await get(q, "rooms", (request.params as any).id);
         if (!room || (await blocked(q, actor.user.id, room.hostId)))
           fail(403, "リアクションを送信できません");
+        if (room.reactions === false)
+          fail(409, "このルームはリアクションを受け付けていません");
         const participant = await get(
           q,
           "participants",
@@ -335,6 +368,20 @@ export function registerSocial(
           { conversation: row.id, ...body },
           async () => {
             const limits = await planLimits(q, actor.user);
+            const file = body.mediaId
+              ? await get(q, "media", body.mediaId)
+              : undefined;
+            await consume(
+              q,
+              actor.user,
+              body.mediaId ? "dm.audio.send" : "dm.send",
+              {
+                target: row.peer,
+                bytes: file?.size,
+                seconds: file?.duration,
+                level: "send",
+              },
+            );
             const todayMessages = (await list(q, "messages")).filter(
               (message) =>
                 message.sender === actor.user.id &&
@@ -352,8 +399,25 @@ export function registerSocial(
               .filter(Boolean);
             if (words.some((word: string) => body.text.includes(word)))
               fail(400, "送信できない言葉が含まれています");
-            if (/https?:\/\/|www\./i.test(body.text))
-              fail(400, "メッセージのURL送信は現在許可されていません");
+            for (const link of body.text.match(
+              /(?:https?:\/\/|www\.)[^\s<>]+/gi,
+            ) ?? []) {
+              let allowed = false;
+              try {
+                const url = new URL(
+                  link.startsWith("www.") ? `https://${link}` : link,
+                );
+                allowed =
+                  url.protocol === "https:" &&
+                  !url.username &&
+                  !url.password &&
+                  !url.port &&
+                  (settings.dmAllowedHosts ?? []).includes(
+                    url.hostname.toLowerCase(),
+                  );
+              } catch {}
+              if (!allowed) fail(400, "許可されていないURLが含まれています");
+            }
             if (body.mediaId) {
               const media = await get(q, "media", body.mediaId);
               if (
@@ -374,6 +438,25 @@ export function registerSocial(
               at: now(),
               status: "delivered",
               retracted: false,
+              ...((
+                await featurePolicy(
+                  q,
+                  actor.user,
+                  body.mediaId ? "dm.audio.send" : "dm.send",
+                )
+              )?.retentionDays
+                ? {
+                    expiresAt: new Date(
+                      Date.now() +
+                        (await featurePolicy(
+                          q,
+                          actor.user,
+                          body.mediaId ? "dm.audio.send" : "dm.send",
+                        ))!.retentionDays! *
+                          86400000,
+                    ).toISOString(),
+                  }
+                : {}),
             };
             await put(q, "messages", message.id, message, row.id);
             const preferences = await get(
@@ -588,10 +671,27 @@ export function registerSocial(
       const existing = liveParticipants.find(
         (row) => row.userId === actor.user.id,
       );
-      if (!existing && liveParticipants.length >= settings.roomLimit)
+      if (
+        !existing &&
+        liveParticipants.length >=
+          Math.min(settings.roomLimit, room.maxListeners ?? 10000)
+      )
         fail(409, "満員です。しばらくしてからお試しください");
+      await consume(q, actor.user, "voice.join", {
+        count: existing ? 0 : 1,
+        target: room.hostId,
+        concurrent:
+          (await list(q, "participants")).filter(
+            (p) =>
+              p.userId === actor.user.id &&
+              (!p.expiresAt || p.expiresAt > now()),
+          ).length + (existing ? 0 : 1),
+        level: "view",
+      });
       const role =
         room.hostId === actor.user.id ? "host" : (existing?.role ?? "listener");
+      if (["host", "cohost", "speaker"].includes(role))
+        await entitled(q, actor.user, "voice.speak");
       const response = await external.voiceToken(
         room.id,
         actor.user.id,
@@ -708,8 +808,18 @@ export function registerSocial(
         await external.roomService.deleteRoom(room.id);
         room.status = "終了";
         await put(q, "rooms", room.id, room);
-        for (const participant of await list(q, "participants", room.id))
+        for (const participant of await list(q, "participants", room.id)) {
+          await notifyUser(
+            q,
+            participant.userId,
+            `voice-end:${room.id}`,
+            "音声ルームが終了しました",
+            room.title,
+            "/space",
+            "voice",
+          );
           await remove(q, "participants", participant.id);
+        }
       } else {
         const target = await get(
           q,
@@ -746,6 +856,21 @@ export function registerSocial(
               true,
             );
         } else {
+          if (body.action !== "listener") {
+            const speaker = (
+              await q.all<User>("SELECT * FROM users WHERE id = ?", [
+                body.userId,
+              ])
+            )[0];
+            if (!speaker || speaker.status !== "active")
+              fail(403, "登壇できません");
+            await entitled(q, speaker, "voice.speak");
+            await consume(q, speaker, "voice.speak", {
+              count: target.role === body.action ? 0 : 1,
+              target: room.hostId,
+              level: "send",
+            });
+          }
           const speakers = (await list(q, "participants", room.id)).filter(
             (row) => ["speaker", "cohost", "host"].includes(row.role),
           );

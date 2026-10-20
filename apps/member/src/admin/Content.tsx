@@ -23,8 +23,9 @@ import {
   downloadCSV,
 } from "../ui";
 import { Chart, ConfigForm } from "./Common";
-import { api, liveMode } from "../api";
+import { api, liveMode, upload } from "../api";
 import { CalendarPage } from "../member/Calendar";
+import { datetimeInput } from "../dates";
 export function AssetUpload({
   value,
   onChange,
@@ -43,7 +44,7 @@ export function AssetUpload({
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => {
+          onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
             if (
@@ -51,6 +52,15 @@ export function AssetUpload({
               file.size > 5 * 1024 * 1024
             ) {
               setError("JPEG・PNG・WebP形式で5MB以下の画像を選んでください");
+              return;
+            }
+            if (liveMode) {
+              try {
+                onChange((await upload(file, "image")).url);
+                setError("");
+              } catch (error) {
+                setError((error as Error).message);
+              }
               return;
             }
             const reader = new FileReader();
@@ -63,7 +73,9 @@ export function AssetUpload({
         />
       </label>
       <small className="preview-note">
-        プレビューでは端末のセッション内に保存します。
+        {liveMode
+          ? "アップロードした画像の縦横比を維持します。"
+          : "プレビューでは端末のセッション内に保存します。"}
       </small>
       {error && <Notice tone="error">{error}</Notice>}
     </div>
@@ -173,6 +185,7 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
             await update(
               (d) => {
                 const entry = {
+                  ...selected,
                   id: selected?.id ?? crypto.randomUUID(),
                   title: v.title,
                   date: v.date,
@@ -183,6 +196,15 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
                   url: link,
                   description: v.description,
                   plan: v.plan,
+                  timezone: v.timezone,
+                  category: v.category,
+                  important: v.important === "重要",
+                  ...(v.publishAt
+                    ? { publishAt: new Date(v.publishAt).toISOString() }
+                    : {}),
+                  ...(v.endAt
+                    ? { endAt: new Date(v.endAt).toISOString() }
+                    : {}),
                 };
                 const index = d.schedules.findIndex((s) => s.id === entry.id);
                 if (index >= 0) d.schedules[index] = entry;
@@ -247,6 +269,39 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
               multiline
             />
           </div>
+          <Select
+            name="timezone"
+            label="配信元タイムゾーン"
+            options={[
+              "Asia/Tokyo",
+              "UTC",
+              "America/New_York",
+              "America/Los_Angeles",
+              "Europe/London",
+              "Asia/Seoul",
+              "Asia/Shanghai",
+            ]}
+            value={selected?.timezone ?? "Asia/Tokyo"}
+          />
+          <Field name="category" label="カテゴリ" value={selected?.category} />
+          <Select
+            name="important"
+            label="重要表示"
+            options={["通常", "重要"]}
+            value={selected?.important ? "重要" : "通常"}
+          />
+          <Field
+            name="endAt"
+            label="終了予定（端末の時刻）"
+            type="datetime-local"
+            value={datetimeInput(selected?.endAt)}
+          />
+          <Field
+            name="publishAt"
+            label="予約公開（端末の時刻）"
+            type="datetime-local"
+            value={datetimeInput(selected?.publishAt)}
+          />
           <AssetUpload
             value={image}
             onChange={setImage}
@@ -295,6 +350,7 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
                   id: crypto.randomUUID(),
                   date: date.toISOString().slice(0, 10),
                   status: "予約",
+                  seriesId: base.seriesId ?? base.id,
                 });
               }
             },
@@ -325,8 +381,10 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
         onSave={(v) =>
           update(
             (d) => {
-              d.schedules.find((s) => s.title === v.schedule)!.status =
-                v.status;
+              const entry = d.schedules.find((s) => s.title === v.schedule)!;
+              entry.status = v.status;
+              if (v.publish)
+                entry.publishAt = new Date(v.publish).toISOString();
             },
             "配信公開状態変更",
             v.schedule,
@@ -338,13 +396,27 @@ export function SchedulesPage({ screen }: { screen: Screen }) {
   return (
     <Confirm
       title="予定変更のお知らせを送りますか？"
-      text={liveMode ? `${first.title}の変更を、対象プランの会員へ通知します。通知設定とサイレント時間帯を尊重します。` : `${first.title}の変更案内をプレビューのお知らせ一覧に追加します。Pushの実配信は行いません。`}
+      text={
+        liveMode
+          ? `${first.title}の変更を、対象プランの会員へ通知します。通知設定とサイレント時間帯を尊重します。`
+          : `${first.title}の変更案内をプレビューのお知らせ一覧に追加します。Pushの実配信は行いません。`
+      }
       action="変更のお知らせを作成"
       reason
       back="A025"
       onConfirm={async (reason) => {
         if (liveMode) {
-          await api("/admin/notifications", { title: `配信予定変更：${first.title}`.slice(0, 100), body: reason.slice(0, 500), plan: first.plan }, "POST", "admin", crypto.randomUUID());
+          await api(
+            "/admin/notifications",
+            {
+              title: `配信予定変更：${first.title}`.slice(0, 100),
+              body: reason.slice(0, 500),
+              plan: first.plan,
+            },
+            "POST",
+            "admin",
+            crypto.randomUUID(),
+          );
         }
         await update(
           (d) => {

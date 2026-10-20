@@ -1,9 +1,14 @@
-import { digest, id, later, now, audit } from "./security.ts";
+import { digest, id, later, now, audit, once } from "./security.ts";
 import { get, list, put, type Database, type Query } from "./db.ts";
 import type { Services } from "./services.ts";
 import type { User } from "./auth.ts";
 import { contentVisible, entitled } from "./domain.ts";
 import { publishBrand } from "./operations.ts";
+import { dispatchCampaign } from "./notifications.ts";
+import { brandedEmail } from "./email.ts";
+import { scheduleStart } from "../../member/src/dates.ts";
+import { activateOdds } from "./gacha-versions.ts";
+import { consume } from "./limits.ts";
 
 export async function enqueue(
   q: Query,
@@ -45,13 +50,16 @@ export async function notifyAudience(
   path: string,
   kind: string,
   plan = "Free",
+  context: Record<string, string> = {},
+  due = now(),
 ) {
-  for (const user of await q.all<User>(
-    "SELECT * FROM users WHERE status = 'active' AND verified = 1",
-  )) {
-    if (plan === "Free" || JSON.parse(user.profile).plan === plan)
-      await notifyUser(q, user.id, key, title, body, path, kind);
-  }
+  await enqueue(
+    q,
+    digest(`audience:${key}`),
+    "audience",
+    { key, title, body, path, kind, plan, context },
+    due,
+  );
 }
 export function quietDelay(preferences: any, timestamp = Date.now()) {
   if (
@@ -89,8 +97,12 @@ export async function scheduleReminders(db: Database) {
     for (const schedule of schedules) {
       if (!contentVisible(schedule, undefined) && schedule.plan === "Free")
         continue;
-      if (schedule.status !== "公開") continue;
-      const start = Date.parse(`${schedule.date}T${schedule.time}:00+09:00`);
+      if (
+        schedule.status !== "公開" &&
+        !(schedule.status === "予約" && schedule.publishAt <= now())
+      )
+        continue;
+      const start = scheduleStart(schedule);
       if (!Number.isFinite(start) || start < Date.now()) continue;
       for (const user of users) {
         if (!contentVisible(schedule, user)) continue;
@@ -113,7 +125,7 @@ export async function scheduleReminders(db: Database) {
               userId: user.id,
               title: "もうすぐマン組の配信！",
               body: `${schedule.title} · ${schedule.time}`,
-              path: `/u/U030?item=${encodeURIComponent(schedule.id)}`,
+              path: `/u/U029?item=${encodeURIComponent(schedule.id)}`,
               notificationKind: "schedule",
               scheduleId: schedule.id,
               startsAt: start,
@@ -144,7 +156,43 @@ export async function processJobs(db: Database, external: Services) {
     if (!job) return;
     const payload = JSON.parse(job.payload);
     try {
-      if (job.kind === "mail") {
+      if (job.kind === "audience") {
+        await db.transaction(async (q) => {
+          const users = (
+            await q.all<User>(
+              "SELECT * FROM users WHERE status = 'active' AND verified = 1",
+            )
+          ).filter(
+            (user) =>
+              payload.plan === "Free" ||
+              JSON.parse(user.profile).plan === payload.plan,
+          );
+          for (let start = 0; start < users.length; start += 25)
+            await enqueue(
+              q,
+              digest(`${job.id}:chunk:${start}`),
+              "audience_chunk",
+              {
+                ...payload,
+                userIds: users.slice(start, start + 25).map((u) => u.id),
+              },
+            );
+        });
+      } else if (job.kind === "audience_chunk") {
+        await db.transaction(async (q) => {
+          for (const userId of payload.userIds)
+            await notifyUser(
+              q,
+              userId,
+              payload.key,
+              payload.title,
+              payload.body,
+              payload.path,
+              payload.kind,
+              payload.context,
+            );
+        });
+      } else if (job.kind === "mail") {
         const valid =
           !payload.tokenHash ||
           (
@@ -158,7 +206,15 @@ export async function processJobs(db: Database, external: Services) {
             to: payload.to,
             subject: payload.subject,
             text: payload.text,
+            html: brandedEmail(
+              await get(db, "brand", "current"),
+              payload.subject,
+              payload.text,
+              external.origin,
+            ),
           });
+      } else if (job.kind === "odds") {
+        await db.transaction((q) => activateOdds(q, payload.versionId));
       } else if (job.kind === "plan_change") {
         await db.transaction(async (q) => {
           const change = await get(q, "planChanges", payload.changeId),
@@ -236,6 +292,7 @@ export async function processJobs(db: Database, external: Services) {
           const story = await get(q, "stories", payload.storyId);
           if (
             story &&
+            story.notify !== false &&
             story.publishAt === payload.publishAt &&
             contentVisible(story, {
               profile: JSON.stringify({ plan: story.plan }),
@@ -271,22 +328,7 @@ export async function processJobs(db: Database, external: Services) {
       } else if (job.kind === "brand")
         await db.transaction((q) => publishBrand(q, payload.versionId));
       else if (job.kind === "campaign") {
-        await db.transaction(async (q) => {
-          await notifyAudience(
-            q,
-            `campaign:${payload.id}`,
-            payload.title,
-            payload.body,
-            "/",
-            "general",
-            payload.plan,
-          );
-          const campaign = await get(q, "campaigns", payload.id);
-          if (campaign) {
-            campaign.status = "配信処理中";
-            await put(q, "campaigns", payload.id, campaign);
-          }
-        });
+        await db.transaction((q) => dispatchCampaign(q, payload.id));
       } else if (job.kind === "host_check") {
         const room = await get(db, "rooms", payload.roomId);
         if (
@@ -319,6 +361,10 @@ export async function processJobs(db: Database, external: Services) {
             dm: "notifyDM",
             story: "notifyStory",
             schedule: "notifySchedule",
+            voice: "notifyVoice",
+            gacha: "notifyGacha",
+            general: "notifyGeneral",
+            security: "notifySecurity",
           } as Record<string, string>
         )[payload.notificationKind];
         let deliver =
@@ -326,8 +372,9 @@ export async function processJobs(db: Database, external: Services) {
           (!name ||
             (global[name] !== false &&
               preferences?.settings?.[name] !== false));
-        if (deliver && user && name) {
+        if (deliver && user) {
           try {
+            await entitled(db, user, "notification.receive");
             await entitled(
               db,
               user,
@@ -335,7 +382,11 @@ export async function processJobs(db: Database, external: Services) {
                 ? "story.view"
                 : payload.notificationKind === "dm"
                   ? "dm.send"
-                  : "notification.receive",
+                  : payload.notificationKind === "gacha"
+                    ? "gacha.draw"
+                    : payload.notificationKind === "voice"
+                      ? "voice.join"
+                      : "notification.receive",
             );
           } catch {
             deliver = false;
@@ -367,13 +418,22 @@ export async function processJobs(db: Database, external: Services) {
           )
             deliver = false;
         }
+        if (payload.roomId) {
+          const room = await get(db, "rooms", payload.roomId);
+          if (
+            !room ||
+            !contentVisible({ ...room, status: "公開" }, user) ||
+            (payload.roomStart && room.startsAt !== payload.roomStart) ||
+            ["終了", "中止", "停止"].includes(room.status)
+          )
+            deliver = false;
+        }
         if (payload.scheduleId) {
           const schedule = await get(db, "schedules", payload.scheduleId);
           if (
             !schedule ||
             !contentVisible(schedule, user) ||
-            Date.parse(`${schedule.date}T${schedule.time}:00+09:00`) !==
-              payload.startsAt
+            scheduleStart(schedule) !== payload.startsAt
           )
             deliver = false;
         }
@@ -387,12 +447,44 @@ export async function processJobs(db: Database, external: Services) {
           );
           continue;
         }
+        const devices = await list(db, "push", payload.userId);
+        if (!devices.length) deliver = false;
+        if (deliver && user) {
+          try {
+            await db.transaction((q) =>
+              once(
+                q,
+                `notification-quota:${user.id}`,
+                job.id,
+                { jobId: job.id },
+                async () => {
+                  await consume(q, user, "notification.receive", {
+                    target: payload.senderId,
+                    level: "view",
+                  });
+                  return { ok: true };
+                },
+              ),
+            );
+          } catch (error: any) {
+            if (
+              error.code === "quota_exceeded" ||
+              error.code === "plan_required"
+            )
+              deliver = false;
+            else throw error;
+          }
+        }
         if (deliver) {
-          for (const device of await list(db, "push", payload.userId)) {
+          for (const device of devices) {
             const deliveryId = digest(`${job.id}:${device.id}`);
-            if (await get(db, "deliveries", deliveryId)) continue;
+            if ((await get(db, "deliveries", deliveryId))?.status === "sent")
+              continue;
             try {
               await external.push(device.subscription, {
+                icon:
+                  (await get(db, "brand", "current"))?.notificationIcon ??
+                  "/api/brand/icon/192",
                 title: payload.title,
                 body: payload.body,
                 url: payload.path,
@@ -410,12 +502,42 @@ export async function processJobs(db: Database, external: Services) {
                     userId: payload.userId,
                     deviceId: device.id,
                     status: "sent",
+                    campaignId: payload.campaignId,
                     at: now(),
                   },
                   payload.userId,
                 ),
               );
+              await db.transaction(async (q) => {
+                const current = await get(q, "push", device.id);
+                if (current)
+                  await put(
+                    q,
+                    "push",
+                    device.id,
+                    { ...current, lastSuccessAt: now() },
+                    payload.userId,
+                  );
+              });
             } catch (error: any) {
+              await db.transaction((q) =>
+                put(
+                  q,
+                  "deliveries",
+                  deliveryId,
+                  {
+                    id: deliveryId,
+                    jobId: job.id,
+                    userId: payload.userId,
+                    deviceId: device.id,
+                    campaignId: payload.campaignId,
+                    status: "failed",
+                    code: error.statusCode ?? "delivery_failed",
+                    at: now(),
+                  },
+                  payload.userId,
+                ),
+              );
               if ([404, 410].includes(error.statusCode))
                 await db.transaction((q) =>
                   q.run(
@@ -427,6 +549,12 @@ export async function processJobs(db: Database, external: Services) {
             }
           }
         }
+        if (payload.campaignId)
+          await recordCampaignOutcome(
+            db,
+            payload,
+            deliver ? "processed" : "skipped",
+          );
       }
       await db.transaction((q) =>
         q.run(
@@ -435,6 +563,8 @@ export async function processJobs(db: Database, external: Services) {
         ),
       );
     } catch (error: any) {
+      if (payload.campaignId && job.attempts >= 5)
+        await recordCampaignOutcome(db, payload, "failed");
       await db.transaction((q) =>
         q.run(
           "UPDATE jobs SET state = ?, due_at = ?, result = ?, locked_until = NULL WHERE id = ?",
@@ -448,4 +578,109 @@ export async function processJobs(db: Database, external: Services) {
       );
     }
   }
+}
+async function recordCampaignOutcome(
+  db: Database,
+  payload: any,
+  status: string,
+) {
+  await db.transaction(async (q) => {
+    await put(
+      q,
+      "campaignOutcomes",
+      digest(`${payload.campaignId}:${payload.userId}`),
+      { userId: payload.userId, status, at: now() },
+      payload.campaignId,
+    );
+    const campaign = await get(q, "campaigns", payload.campaignId);
+    if (
+      campaign &&
+      (await list(q, "campaignOutcomes", campaign.id)).length >= campaign.count
+    )
+      await put(q, "campaigns", campaign.id, {
+        ...campaign,
+        status: "完了",
+        completedAt: now(),
+      });
+  });
+}
+export async function scheduleEngagement(db: Database) {
+  await db.transaction(async (q) => {
+    const last = await get(q, "engagement", "last");
+    if (last?.at > new Date(Date.now() - 60000).toISOString()) return;
+    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    for (const room of await list(q, "rooms")) {
+      if (room.status === "開催中" && room.startedAt)
+        await notifyAudience(
+          q,
+          `voice-start:${room.id}:${room.startedAt}`,
+          "マン組の音声ルームが始まりました",
+          room.title,
+          `/space?item=${room.id}`,
+          "voice",
+          room.plan,
+          { roomId: room.id },
+        );
+      if (room.status === "開催予定" && room.startsAt && room.startsAt > now())
+        await notifyAudience(
+          q,
+          `voice-reminder:${room.id}:${room.startsAt}`,
+          "まもなく音声ルーム",
+          room.title,
+          `/space?item=${room.id}`,
+          "voice",
+          room.plan,
+          { roomId: room.id, roomStart: room.startsAt },
+          new Date(
+            Math.max(Date.now(), Date.parse(room.startsAt) - 600000),
+          ).toISOString(),
+        );
+    }
+    for (const campaign of [
+      { ...(await get(q, "gacha", "global")), id: "global" },
+      ...(await list(q, "gachaCampaigns")),
+    ]) {
+      if (
+        campaign.status !== "公開" ||
+        today < campaign.start ||
+        today > campaign.end
+      )
+        continue;
+      const plan = campaign.plan ?? "Free",
+        path = `/gacha?campaign=${campaign.id}`;
+      if (today === campaign.start)
+        await notifyAudience(
+          q,
+          `gacha-start:${campaign.id}:${campaign.start}`,
+          "ガチャキャンペーン開始",
+          campaign.title,
+          path,
+          "gacha",
+          plan,
+        );
+      if (campaign.dailyTickets)
+        await notifyAudience(
+          q,
+          `gacha-free:${campaign.id}:${today}`,
+          "今日の無料チケット",
+          `${campaign.title}で無料チケットを受け取れます`,
+          path,
+          "gacha",
+          plan,
+          {},
+          new Date(`${today}T09:00:00+09:00`).toISOString(),
+        );
+      if (today === campaign.end)
+        await notifyAudience(
+          q,
+          `gacha-end:${campaign.id}:${campaign.end}`,
+          "キャンペーンは本日まで",
+          campaign.title,
+          path,
+          "gacha",
+          plan,
+        );
+    }
+    await put(q, "engagement", "last", { at: now() });
+  });
 }

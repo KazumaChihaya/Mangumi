@@ -3,6 +3,7 @@ import { publicPath } from "../web-path";
 import { useLocalSearchParams } from "expo-router";
 import { useStore } from "../store";
 import { safeLink } from "../model";
+import { localSchedule, scheduleStart } from "../dates";
 import type { Screen } from "../registry";
 import {
   Badge,
@@ -24,12 +25,13 @@ export function CalendarPage({
   admin?: boolean;
 }) {
   const { state, update, notify, live } = useStore();
+  const schedules =
+    live && !admin ? state.schedules.map(localSchedule) : state.schedules;
   const { item } = useLocalSearchParams<{ item?: string }>();
   const [month, setMonth] = useState(live ? new Date().getMonth() : 9);
   const [year, setYear] = useState(live ? new Date().getFullYear() : 2026);
   const [day, setDay] = useState(live ? new Date().getDate() : 16);
-  const selected =
-    state.schedules.find((s) => s.id === item) ?? state.schedules[0];
+  const selected = schedules.find((s) => s.id === item) ?? schedules[0];
   if (["U029", "U032", "U033"].includes(screen.id) && !selected)
     return (
       <Panel>
@@ -86,7 +88,20 @@ export function CalendarPage({
           <dl className="detail-grid">
             <dt>配信日時</dt>
             <dd>
-              {selected.date} {selected.time} JST
+              {selected.date} {selected.time}（
+              {live
+                ? Intl.DateTimeFormat().resolvedOptions().timeZone
+                : "Asia/Tokyo"}
+              ）
+              {live && (
+                <small>
+                  元の日時：
+                  {new Date(scheduleStart(selected)).toLocaleString("ja-JP", {
+                    timeZone: selected.timezone ?? "Asia/Tokyo",
+                  })}
+                  （{selected.timezone ?? "Asia/Tokyo"}）
+                </small>
+              )}
             </dd>
             <dt>配信者</dt>
             <dd>{selected.host}</dd>
@@ -133,12 +148,14 @@ export function CalendarPage({
   const monthDays = new Date(year, month + 1, 0).getDate();
   const startWeekDay = new Date(year, month, 1).getDay();
   const dateString = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  const dayEvents = state.schedules.filter(
+  const dayEvents = schedules.filter(
     (s) => s.date === dateString && s.status !== "下書き",
   );
   const events =
     screen.id === "U031"
-      ? state.schedules.filter((s) => s.status !== "下書き")
+      ? schedules
+          .filter((s) => s.status !== "下書き")
+          .sort((a, b) => scheduleStart(a) - scheduleStart(b))
       : dayEvents;
   return (
     <>
@@ -198,7 +215,7 @@ export function CalendarPage({
                       )
                     : new Date(year, month, i + 1);
                 const d = date.getDate();
-                const hasEvent = state.schedules.some(
+                const hasEvent = schedules.some(
                   (s) =>
                     s.date ===
                     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
@@ -232,7 +249,11 @@ export function CalendarPage({
             ? "これからの配信"
             : `${month + 1}月${day}日の配信`
         }
-        action={<Badge>JST</Badge>}
+        action={
+          <Badge>
+            {live ? Intl.DateTimeFormat().resolvedOptions().timeZone : "JST"}
+          </Badge>
+        }
       >
         {events.length ? (
           events.map((event) => (

@@ -20,6 +20,7 @@ type Voice = {
   muted: boolean;
   role: string;
   error: string;
+  quality: string;
   join: (id: string) => Promise<void>;
   leave: () => Promise<void>;
   microphone: () => Promise<void>;
@@ -34,6 +35,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMuted] = useState(true);
   const [role, setRole] = useState("listener");
   const [error, setError] = useState("");
+  const [quality, setQuality] = useState("unknown");
+  const reconnects = useRef(0);
   const elements = useRef(new Set<HTMLMediaElement>());
   const connecting = useRef(false);
   async function leave() {
@@ -85,7 +88,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       setConnected(false);
       setError("音声ルームから切断されました。再接続できます。");
     });
-    next.on(RoomEvent.Reconnecting, () => setError("再接続しています…"));
+    next.on(RoomEvent.Reconnecting, () => {
+      reconnects.current++;
+      setError("再接続しています…");
+    });
+    next.on(RoomEvent.ConnectionQualityChanged, (value, participant) => {
+      if (participant === next.localParticipant) setQuality(value);
+    });
     next.on(RoomEvent.Reconnected, () => {
       setConnected(true);
       setError("");
@@ -133,12 +142,47 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state.profile.signedIn && room.current) void leave().catch(() => {});
   }, [state.profile.signedIn]);
+  useEffect(() => {
+    if (!active || !connected) return;
+    const timer = setInterval(async () => {
+      const current = room.current;
+      if (!current) return;
+      let rtt: number | undefined, packetLoss: number | undefined;
+      const publication = current.localParticipant.getTrackPublication(
+        Track.Source.Microphone,
+      );
+      const stats = await publication?.track
+        ?.getRTCStatsReport()
+        .catch(() => undefined);
+      stats?.forEach((stat) => {
+        if (
+          stat.type === "candidate-pair" &&
+          stat.state === "succeeded" &&
+          typeof stat.currentRoundTripTime === "number"
+        )
+          rtt = Math.min(60000, Math.max(0, stat.currentRoundTripTime * 1000));
+        if (
+          stat.type === "remote-inbound-rtp" &&
+          typeof stat.fractionLost === "number"
+        )
+          packetLoss = Math.min(1, Math.max(0, stat.fractionLost));
+      });
+      await api(`/voice-rooms/${active}/quality`, {
+        quality: current.localParticipant.connectionQuality,
+        reconnects: reconnects.current,
+        ...(rtt !== undefined ? { rtt } : {}),
+        ...(packetLoss !== undefined ? { packetLoss } : {}),
+      }).catch(() => {});
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [active, connected]);
   const value: Voice = {
     active,
     connected,
     muted,
     role,
     error,
+    quality,
     join,
     leave,
     microphone: async () => {
@@ -179,6 +223,7 @@ export function LiveVoice({ screen }: { screen: Screen }) {
     <>
       {!admin && <OfficialRoom />}
       <Panel title="マン組の音声ルーム">
+        {voice.connected && <p>接続品質：{voice.quality}</p>}
         {voice.error && <Notice>{voice.error}</Notice>}
         {participants.error && (
           <Notice tone="error">{participants.error}</Notice>

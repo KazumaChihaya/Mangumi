@@ -2,8 +2,11 @@ import React, { useState } from "react";
 import { api, upload } from "../api";
 import { useStore } from "../store";
 import { Button, Field, Form, Notice, Panel, Select, Table } from "../ui";
+import { useResource } from "./hooks";
+import { datetimeInput } from "../dates";
 export function LiveStoriesAdmin() {
   const { state, refresh, notify } = useStore();
+  const analytics = useResource<any[]>("/admin/story-analytics", 0);
   const [image, setImage] = useState("");
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
   return (
@@ -24,6 +27,8 @@ export function LiveStoriesAdmin() {
               status: values.status,
               plan: values.plan,
               highlight: values.highlight === "ハイライトに残す",
+              notify: values.notify === "通知する",
+              ...(values.link ? { link: values.link } : {}),
               publishAt,
               expiresAt: values.expiresAt
                 ? new Date(values.expiresAt).toISOString()
@@ -43,10 +48,17 @@ export function LiveStoriesAdmin() {
               crypto.randomUUID(),
             );
             await refresh();
+            await analytics.reload();
             notify("ストーリーを保存しました");
           }}
         >
           <Field name="title" label="ストーリーの本文" multiline required />
+          <Field name="link" label="リンク先（HTTPS・任意）" type="url" />
+          <Select
+            name="notify"
+            label="公開時の通知"
+            options={["通知する", "通知しない"]}
+          />
           <label className="field">
             <span>画像・短い動画（20MB・60秒以内）</span>
             <input
@@ -102,6 +114,16 @@ export function LiveStoriesAdmin() {
           />
         </Form>
       </Panel>
+      <Panel title="閲覧集計">
+        <Table
+          columns={["ストーリー", "状態", "閲覧者数"]}
+          rows={(analytics.data ?? []).map((s) => [
+            s.title,
+            s.status,
+            s.viewers,
+          ])}
+        />
+      </Panel>
       <Panel title="ストーリー管理">
         {state.stories.map((story) => (
           <Panel key={story.id} title={story.title}>
@@ -130,7 +152,19 @@ export function LiveStoriesAdmin() {
                         resource: "stories",
                         id: story.id,
                         before: story,
-                        after: { ...story, status: values.status },
+                        after: {
+                          ...story,
+                          status: values.status,
+                          title: values.title,
+                          plan: values.plan,
+                          highlight: values.highlight === "残す",
+                          notify: values.notify === "通知する",
+                          publishAt: new Date(values.publishAt).toISOString(),
+                          expiresAt: new Date(values.expiresAt).toISOString(),
+                          ...(values.link
+                            ? { link: values.link }
+                            : { link: undefined }),
+                        },
                       },
                     ],
                     action: "ストーリー公開変更",
@@ -141,8 +175,56 @@ export function LiveStoriesAdmin() {
                   crypto.randomUUID(),
                 );
                 await refresh();
+                await analytics.reload();
               }}
             >
+              <Field
+                name="title"
+                label="本文"
+                value={story.title}
+                multiline
+                required
+              />
+              <Select
+                name="plan"
+                label="対象プラン"
+                value={story.plan}
+                options={state.plans.map((p) => p.name)}
+              />
+              <Select
+                name="highlight"
+                label="ハイライト"
+                value={story.highlight ? "残す" : "残さない"}
+                options={["残す", "残さない"]}
+              />
+              <Select
+                name="notify"
+                label="公開時の通知"
+                value={
+                  (story as any).notify === false ? "通知しない" : "通知する"
+                }
+                options={["通知する", "通知しない"]}
+              />
+              <Field
+                name="publishAt"
+                label="公開日時"
+                type="datetime-local"
+                value={datetimeInput((story as any).publishAt)}
+                required
+              />
+              <Field
+                name="expiresAt"
+                label="終了日時"
+                type="datetime-local"
+                value={datetimeInput((story as any).expiresAt)}
+                required
+              />
+              <Field
+                name="link"
+                label="リンク先"
+                type="url"
+                value={(story as any).link}
+              />
               <Select
                 name="status"
                 label="公開状態"
@@ -159,6 +241,9 @@ export function LiveStoriesAdmin() {
 }
 export function LiveGachaAdmin() {
   const { state, refresh, notify } = useStore();
+  const versions = useResource("/admin/gacha/versions", 0);
+  const campaigns = useResource<any[]>("/admin/gacha/campaigns", 0);
+  const [editingCampaign, setEditingCampaign] = useState<any>();
   const [image, setImage] = useState("/assets/thumb_1.jpg");
   const [rewardFile, setRewardFile] = useState("");
   const [draft, setDraft] = useState<any[] | null>(null);
@@ -291,6 +376,128 @@ export function LiveGachaAdmin() {
           />
         </Form>
       </Panel>
+      <Panel title="追加キャンペーン">
+        <Notice>
+          通常ガチャと並行して公開できます。キャンペーンごとに適用済みの確率版を固定します。
+        </Notice>
+        {campaigns.data?.map((c) => (
+          <Button key={c.id} tone="ghost" onClick={() => setEditingCampaign(c)}>
+            {c.title} · {c.status}
+          </Button>
+        ))}
+        <Button tone="ghost" onClick={() => setEditingCampaign(undefined)}>
+          新しいキャンペーン
+        </Button>
+        <Form
+          key={editingCampaign?.id ?? "new-campaign"}
+          submit="追加キャンペーンを保存"
+          onSubmit={async (v) => {
+            await api("/admin/gacha/campaigns", {
+              campaign: {
+                ...(editingCampaign ? { id: editingCampaign.id } : {}),
+                title: v.title,
+                status: v.status,
+                start: v.start,
+                end: v.end,
+                plan: v.plan,
+                description: v.description,
+                oddsVersion: v.oddsVersion,
+                ticketCost: Number(v.ticketCost),
+                maxBatch: Number(v.maxBatch),
+                dailyTickets: Number(v.dailyTickets),
+                maxPerUser: Number(v.maxPerUser),
+              },
+              reason: v.reason,
+            });
+            await campaigns.reload();
+            notify("キャンペーンを保存しました");
+          }}
+        >
+          <Field
+            name="title"
+            label="キャンペーン名"
+            value={editingCampaign?.title}
+            required
+          />
+          <Field
+            name="description"
+            label="説明"
+            value={editingCampaign?.description}
+            multiline
+          />
+          <Field
+            name="start"
+            label="開始日（日本時間）"
+            type="date"
+            value={editingCampaign?.start}
+            required
+          />
+          <Field
+            name="end"
+            label="終了日（日本時間）"
+            type="date"
+            value={editingCampaign?.end}
+            required
+          />
+          <Select
+            name="status"
+            label="公開状態"
+            options={["下書き", "公開", "停止", "終了"]}
+            value={editingCampaign?.status}
+          />
+          <Select
+            name="plan"
+            label="対象プラン"
+            options={state.plans.map((p) => p.name)}
+            value={editingCampaign?.plan}
+          />
+          <Select
+            name="oddsVersion"
+            label="確率版"
+            options={[
+              versions.data?.current?.version,
+              ...(versions.data?.history ?? []).map((v: any) => v.version),
+            ].filter(Boolean)}
+            value={editingCampaign?.oddsVersion}
+          />
+          <Field
+            name="ticketCost"
+            label="1回に必要なチケット"
+            type="number"
+            min={1}
+            max={100}
+            value={editingCampaign?.ticketCost ?? 1}
+            required
+          />
+          <Field
+            name="maxBatch"
+            label="一度に引ける回数"
+            type="number"
+            min={1}
+            max={10}
+            value={editingCampaign?.maxBatch ?? 10}
+            required
+          />
+          <Field
+            name="dailyTickets"
+            label="毎日の無料チケット"
+            type="number"
+            min={0}
+            max={100}
+            value={editingCampaign?.dailyTickets ?? 0}
+            required
+          />
+          <Field
+            name="maxPerUser"
+            label="1人の期間中上限"
+            type="number"
+            min={1}
+            value={editingCampaign?.maxPerUser ?? 10000}
+            required
+          />
+          <Field name="reason" label="変更理由" required />
+        </Form>
+      </Panel>
       <Panel title="景品を追加">
         <Form
           submit="景品を編集リストへ追加"
@@ -393,6 +600,31 @@ export function LiveGachaAdmin() {
             />
           </label>
         ))}
+        {items.map((prize, index) => (
+          <details key={prize.id ?? index}>
+            <summary>{prize.title}の在庫と編集</summary>
+            <label className="field">
+              <span>在庫総数（空欄は無制限、配布済みの数量以上）</span>
+              <input
+                type="number"
+                min={0}
+                value={prize.stock ?? ""}
+                onChange={(e) => {
+                  const next = structuredClone(items);
+                  next[index].stock =
+                    e.target.value === "" ? undefined : Number(e.target.value);
+                  setDraft(next);
+                }}
+              />
+            </label>
+            <Button
+              tone="danger"
+              onClick={() => setDraft(items.filter((_, n) => n !== index))}
+            >
+              編集リストから外す
+            </Button>
+          </details>
+        ))}
         <Notice>
           合計{" "}
           {items.reduce(
@@ -404,6 +636,61 @@ export function LiveGachaAdmin() {
         <Button onClick={() => save(items)}>
           合計100%の提供割合を保存する
         </Button>
+      </Panel>
+      <Panel title="提供割合の予約と履歴">
+        <Form
+          submit="編集中の提供割合を予約"
+          onSubmit={async (v) => {
+            await api("/admin/gacha/versions", {
+              items,
+              effectiveAt: new Date(v.effectiveAt).toISOString(),
+              reason: v.reason,
+            });
+            await versions.reload();
+          }}
+        >
+          <Field
+            name="effectiveAt"
+            label="適用開始日時"
+            type="datetime-local"
+            required
+          />
+          <Field name="reason" label="変更理由" required />
+        </Form>
+        <p>現在の版：{versions.data?.current?.version}</p>
+        <Table
+          columns={["版", "適用日時", "状態"]}
+          rows={[
+            ...(versions.data?.history ?? []).map((v: any) => [
+              v.version,
+              v.at,
+              "過去の版",
+            ]),
+            ...(versions.data?.scheduled ?? []).map((v: any) => [
+              v.id,
+              v.effectiveAt,
+              v.status,
+            ]),
+          ]}
+        />
+        {versions.data?.scheduled
+          ?.filter((v: any) => v.status === "予約")
+          .map((v: any) => (
+            <Form
+              key={v.id}
+              submit="この予約を取り消す"
+              tone="danger"
+              onSubmit={async (values) => {
+                await api(`/admin/gacha/versions/${v.id}/cancel`, values);
+                await versions.reload();
+              }}
+            >
+              <p>
+                {v.effectiveAt} · {v.id}
+              </p>
+              <Field name="reason" label="取消理由" required />
+            </Form>
+          ))}
       </Panel>
       <Panel title="抽選履歴">
         <Table

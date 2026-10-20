@@ -9,7 +9,7 @@ self.addEventListener("push", (event) => {
   try { payload = event.data?.json(); } catch { return; }
   if (!payload?.title) return;
   event.waitUntil(self.registration.showNotification(String(payload.title).slice(0, 100), {
-    body: String(payload.body ?? "").slice(0, 500), icon, badge: icon,
+    body: String(payload.body ?? "").slice(0, 500), icon: typeof payload.icon === "string" && payload.icon.startsWith("/api/") ? payload.icon : icon, badge: icon,
     tag: payload.tag, data: { url: payload.url, deliveryId: payload.deliveryId },
   }));
 });

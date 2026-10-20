@@ -15,6 +15,10 @@ import {
 } from "./security.ts";
 import { permit, roleNames, type Identity, type User } from "./auth.ts";
 import { features } from "../../member/src/features.ts";
+import { policiesSchema, consume } from "./limits.ts";
+import { wallTimeToISO } from "../../member/src/dates.ts";
+import { activateDueOdds } from "./gacha-versions.ts";
+import { campaignOdds } from "./campaigns.ts";
 
 const text = z.string().trim().min(1).max(200);
 const resourceId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
@@ -54,6 +58,22 @@ const scheduleSchema = z
     url: z.url().startsWith("https://"),
     description: z.string().max(10000),
     plan,
+    timezone: z
+      .string()
+      .max(80)
+      .refine((value) => {
+        try {
+          new Intl.DateTimeFormat("ja", { timeZone: value });
+          return true;
+        } catch {
+          return false;
+        }
+      })
+      .optional(),
+    startsAt: z.iso.datetime().optional(),
+    category: z.string().max(100).optional(),
+    important: z.boolean().optional(),
+    seriesId: resourceId.optional(),
     publishAt: z.iso.datetime().optional(),
     endAt: z.iso.datetime().optional(),
     recurrence: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
@@ -77,6 +97,7 @@ export const storySchema = z
     publishAt: z.iso.datetime().optional(),
     expiresAt: z.iso.datetime().optional(),
     link: z.url().startsWith("https://").optional(),
+    notify: z.boolean().optional(),
   })
   .strict();
 const roomSchema = z
@@ -88,6 +109,14 @@ const roomSchema = z
     status,
     plan,
     hostId: resourceId.optional(),
+    startedAt: z.iso.datetime().optional(),
+    maxMinutes: z.number().int().min(1).max(1440).optional(),
+    maxListeners: z.number().int().min(1).max(10000).optional(),
+    description: z.string().max(5000).optional(),
+    cover: asset.optional(),
+    visibility: z.enum(["public", "plan", "invite"]).optional(),
+    invited: z.array(resourceId).max(1000).optional(),
+    reactions: z.boolean().optional(),
     maxSpeakers: z.number().int().min(1).max(50).optional(),
     startsAt: z.iso.datetime().optional(),
   })
@@ -109,6 +138,14 @@ const planSchema = z
     dmPerDay: z.number().int().min(0).max(10000).optional(),
     audioSeconds: z.number().int().min(1).max(300).optional(),
     gachaPerDay: z.number().int().min(0).max(10000).optional(),
+    policies: policiesSchema.optional(),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    badge: z.string().max(30).optional(),
+    order: z.number().int().min(0).max(1000).optional(),
+    cancellation: z.enum(["period_end", "immediate"]).optional(),
   })
   .strict();
 const noticeSchema = z
@@ -143,11 +180,23 @@ export const settingsSchema = z
   .object({
     name: text,
     accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    background: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    button: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
     maintenance: z.boolean(),
     maintenanceText: z.string().max(2000),
     notifyDM: z.boolean(),
     notifyStory: z.boolean(),
     notifySchedule: z.boolean(),
+    notifyVoice: z.boolean().optional(),
+    notifyGacha: z.boolean().optional(),
+    notifyGeneral: z.boolean().optional(),
+    notifySecurity: z.boolean().optional(),
     quiet: z.boolean(),
     quietFrom: z.string().regex(/^\d{2}:\d{2}$/),
     quietTo: z.string().regex(/^\d{2}:\d{2}$/),
@@ -156,8 +205,26 @@ export const settingsSchema = z
     audioSeconds: z.number().int().min(1).max(300),
     retention: z.number().int().min(1).max(3650),
     tipMax: z.number().int().min(100).max(100000),
+    tipMin: z.number().int().min(100).max(100000).optional(),
+    tipPresets: z
+      .array(z.number().int().min(100).max(100000))
+      .min(1)
+      .max(10)
+      .optional(),
+    tipDaily: z.number().int().min(100).max(10000000).optional(),
+    tipMonthly: z.number().int().min(100).max(100000000).optional(),
     dmPolicy: z.enum(["公式配信者のみ", "不可"]),
+    dmAllowedHosts: z
+      .array(
+        z
+          .string()
+          .max(253)
+          .regex(/^[a-z\d.-]+$/i),
+      )
+      .max(100)
+      .optional(),
     ngWords: z.string().max(5000),
+    duplicateNicknames: z.boolean().optional(),
     phase: z.string().max(100),
     billingEnabled: z.boolean().optional(),
     welcomeTickets: z.number().int().min(0).max(100).optional(),
@@ -275,16 +342,21 @@ export async function entitled(q: Query, user: User, feature: string) {
   };
   const profile = JSON.parse(user.profile);
   const plans = await list(q, "plans");
-  const current = plans.find(
-    (item) => item.name === profile.plan && item.published,
-  );
+  const current =
+    plans.find((item) => item.name === profile.plan) ??
+    plans.find((item) => item.id === "free");
   const override = await get(q, "overrides", user.id);
+  if (!(feature in features)) fail(403, "登録されていない機能です");
   if (
     (override?.expires?.[feature] ?? override?.expiresAt) > now() &&
     typeof override.features?.[feature] === "boolean"
   ) {
     if (override.features[feature]) return;
     fail(403, "この機能は利用できません");
+  }
+  if (current?.policies?.[feature]) {
+    if (current.policies[feature].allowed) return;
+    fail(403, "この機能は現在のプランでは利用できません", "plan_required");
   }
   if (
     !current ||
@@ -306,7 +378,7 @@ export async function planLimits(q: Query, user: User) {
   );
 }
 export async function queueStory(q: Query, story: any) {
-  if (story.status !== "公開") return;
+  if (story.status !== "公開" || story.notify === false) return;
   const key = digest(`story:${story.id}:${story.publishAt}`);
   if (!(await q.all("SELECT id FROM jobs WHERE id = ?", [key])).length)
     await q.run(
@@ -322,7 +394,18 @@ export async function queueStory(q: Query, story: any) {
 }
 export function contentVisible(item: any, user: User | undefined) {
   if (
+    item.visibility === "invite" &&
+    (!user || (user.id !== item.hostId && !item.invited?.includes(user.id)))
+  )
+    return false;
+  if (
     item.status !== "公開" &&
+    !(
+      item.date &&
+      item.time &&
+      ["中止", "延期", "終了"].includes(item.status)
+    ) &&
+    !(item.status === "予約" && item.publishAt && item.publishAt <= now()) &&
     item.status !== "開催中" &&
     item.status !== "開催予定"
   )
@@ -332,21 +415,45 @@ export function contentVisible(item: any, user: User | undefined) {
     return false;
   return (
     item.plan === "Free" ||
-    (!!user && JSON.parse(user.profile).plan === item.plan)
+    (!!user &&
+      (user.id === item.hostId || JSON.parse(user.profile).plan === item.plan))
   );
 }
-export async function snapshot(q: Query, actor?: Identity) {
+export async function snapshot(
+  q: Query,
+  actor?: Identity,
+  campaignId = "global",
+) {
+  await activateDueOdds(q);
   const state = blankState();
   state.entitlements = {};
+  state.featureNames = Object.fromEntries(
+    (await list(q, "featureDefinitions")).map((f) => [f.key, f.name]),
+  );
   state.settings = (await get(q, "settings", "global"))!;
   state.plans = await list(q, "plans");
+  state.plans.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
   if (actor?.area !== "admin")
-    state.plans = state.plans.filter((item) => item.published);
+    state.plans = state.plans.filter(
+      (item) =>
+        item.published ||
+        (actor?.user && item.name === JSON.parse(actor.user.profile).plan),
+    );
   state.gacha = (await get(q, "gacha", "global"))!;
+  if (actor?.area === "member" && campaignId !== "global") {
+    const selected = await get(q, "gachaCampaigns", campaignId);
+    if (
+      selected &&
+      selected.status === "公開" &&
+      (selected.plan === "Free" ||
+        selected.plan === JSON.parse(actor.user.profile).plan)
+    )
+      state.gacha = selected;
+  }
   for (const record of await list(q, "records"))
     if (/^A0(75|76|77|78|79|81)$/.test(record.id))
       state.records[record.id] = record.values;
-  const probability = await get(q, "probabilities", "current");
+  const probability = await campaignOdds(q, state.gacha);
   state.probabilities = probability.items;
   state.probabilityVersion = probability.version;
   for (const name of ["schedules", "stories", "rooms", "notices"] as const) {
@@ -565,6 +672,16 @@ export async function mutate(
         if (patch.name) {
           const settings = await get(q, "settings", "global");
           if (
+            settings.duplicateNicknames === false &&
+            (
+              await q.all<User>(
+                "SELECT * FROM users WHERE status = 'active' AND id <> ?",
+                [actor.user.id],
+              )
+            ).some((user) => JSON.parse(user.profile).name === patch.name)
+          )
+            fail(409, "このニックネームは使用されています");
+          if (
             settings.ngWords
               .split(/[,、\n]/)
               .map((word: string) => word.trim())
@@ -572,6 +689,15 @@ export async function mutate(
               .some((word: string) => patch.name!.includes(word))
           )
             fail(400, "別のニックネームを選んでください");
+        }
+        if (patch.avatar?.startsWith("/api/media/")) {
+          const avatar = await get(q, "media", patch.avatar.split("/").at(-1)!);
+          if (
+            !avatar ||
+            avatar.kind !== "avatar" ||
+            avatar.owner !== actor.user.id
+          )
+            fail(403, "自分のプロフィール画像をアップロードしてください");
         }
         await q.run("UPDATE users SET profile = ? WHERE id = ?", [
           JSON.stringify({ ...JSON.parse(actor.user.profile), ...patch }),
@@ -610,6 +736,10 @@ export async function mutate(
                 notifyDM: z.boolean(),
                 notifyStory: z.boolean(),
                 notifySchedule: z.boolean(),
+                notifyVoice: z.boolean(),
+                notifyGacha: z.boolean(),
+                notifyGeneral: z.boolean(),
+                notifySecurity: z.boolean(),
                 quiet: z.boolean(),
                 quietFrom: z.string().regex(/^\d{2}:\d{2}$/),
                 quietTo: z.string().regex(/^\d{2}:\d{2}$/),
@@ -629,6 +759,11 @@ export async function mutate(
           !(after as any)?.viewed
         )
           fail(403, "閲覧できないストーリーです");
+        if (!(await get(q, "storyViews", `${actor.user.id}_${entityId}`)))
+          await consume(q, actor.user, "story.view", {
+            level: "view",
+            target: story.authorId ?? story.id,
+          });
         await put(
           q,
           "storyViews",
@@ -726,6 +861,19 @@ export async function mutate(
       } else if (resource === "settings") {
         const old = await get(q, "settings", "global");
         const patch = settingsSchema.partial().parse(after);
+        const values = { ...old, ...patch };
+        if (
+          (values.tipMin ?? 100) > values.tipMax ||
+          (values.tipDaily ?? Infinity) < values.tipMax ||
+          (values.tipMonthly ?? Infinity) < (values.tipDaily ?? values.tipMax)
+        )
+          fail(400, "金額の最小・最大・日次・月次の順序を確認してください");
+        if (
+          values.tipPresets?.some(
+            (n: number) => n < (values.tipMin ?? 100) || n > values.tipMax,
+          )
+        )
+          fail(400, "金額候補は最低額と1回上限の範囲内にしてください");
         if (patch.adminNetworks && !networkAllowed(patch.adminNetworks, ip))
           fail(400, "現在の接続元IPを許可リストに含めてください");
         await put(
@@ -749,58 +897,7 @@ export async function mutate(
           fail(400, "秘密情報は環境設定に保存してください");
         await put(q, "records", entityId, { id: entityId, values });
       } else if (resource === "probabilities") {
-        const items = z.array(prizeSchema).min(1).max(100).parse(after);
-        if (
-          items.reduce(
-            (sum, item) => sum + Math.round(item.weight * 100),
-            0,
-          ) !== 10000
-        )
-          fail(400, "提供割合の合計を厳密に100%にしてください");
-        const current = await get(q, "probabilities", "current");
-        for (const prize of items) {
-          if (prize.assetId) {
-            const file = await get(q, "media", prize.assetId);
-            if (
-              !file ||
-              file.kind !==
-                (prize.kind === "voice" ? "rewardAudio" : "rewardImage")
-            )
-              fail(400, "景品に合う専用ファイルをアップロードしてください");
-          }
-          const key = prize.id ?? digest(`${prize.title}:${prize.image}`);
-          const old = current.items.find(
-            (item: any) =>
-              (item.id ?? digest(`${item.title}:${item.image}`)) === key,
-          );
-          const inventory = await get(q, "inventory", key);
-          if (prize.stock !== old?.stock) {
-            const distributed =
-              old?.stock !== undefined && inventory?.remaining !== undefined
-                ? old.stock - inventory.remaining
-                : (await list(q, "draws")).filter(
-                    (draw) =>
-                      draw.prizeId === key ||
-                      (!draw.prizeId &&
-                        draw.title === prize.title &&
-                        draw.image === prize.image),
-                  ).length;
-            if (prize.stock !== undefined && prize.stock < distributed)
-              fail(400, "在庫総数は配布済みの数量以上にしてください");
-            await put(q, "inventory", key, {
-              remaining:
-                prize.stock === undefined
-                  ? undefined
-                  : prize.stock - distributed,
-            });
-          }
-        }
-        if (current.items.length)
-          await put(q, "probabilityVersions", current.version, {
-            ...current,
-            at: now(),
-          });
-        await put(q, "probabilities", "current", { version: id(), items });
+        await applyProbabilities(q, after);
       } else if (resource === "gacha") {
         const data = z
           .object({
@@ -887,10 +984,26 @@ export async function mutate(
             delete parsed.viewed;
             parsed.publishAt ??= now();
             parsed.expiresAt ??= new Date(Date.now() + 86400000).toISOString();
+            if (parsed.expiresAt <= parsed.publishAt)
+              fail(400, "公開終了日時は公開日時より後にしてください");
+          }
+          if (resource === "schedules") {
+            try {
+              parsed.startsAt = wallTimeToISO(
+                parsed.date,
+                parsed.time,
+                parsed.timezone ?? "Asia/Tokyo",
+              );
+            } catch {
+              fail(400, "配信日時とタイムゾーンを確認してください");
+            }
+            if (parsed.endAt && parsed.endAt <= parsed.startsAt)
+              fail(400, "終了日時は開始日時より後にしてください");
           }
           if (resource === "rooms") {
             parsed.listeners = 0;
             parsed.hostId ??= actor.user.id;
+            if (parsed.status === "開催中") parsed.startedAt ??= now();
           }
           await put(q, resource, entityId, parsed);
           if (resource === "stories") await queueStory(q, parsed);
@@ -915,100 +1028,181 @@ export async function draw(
   actor: Identity,
   count: number,
   requestKey: string,
+  campaignId = "global",
 ) {
   await entitled(q, actor.user, "gacha.draw");
-  return once(q, `gacha:${actor.user.id}`, requestKey, { count }, async () => {
-    const campaign = await get(q, "gacha", "global");
-    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
-    if (
-      campaign.status !== "公開" ||
-      today < campaign.start ||
-      today > campaign.end
-    )
-      fail(409, "現在開催中のガチャはありません");
-    const wallet = (await get(q, "wallet", actor.user.id)) ?? { balance: 0 };
-    if (
-      campaign.plan &&
-      campaign.plan !== "Free" &&
-      JSON.parse(actor.user.profile).plan !== campaign.plan
-    )
-      fail(403, "このキャンペーンは対象プラン限定です");
-    if (count > (campaign.maxBatch ?? 10))
-      fail(400, "一度に抽選できる回数を超えています");
-    const cost = count * (campaign.ticketCost ?? 1);
-    const ownDraws = (await list(q, "draws", actor.user.id)).filter(
-      (draw) =>
-        draw.at.slice(0, 10) >= campaign.start &&
-        draw.at.slice(0, 10) <= campaign.end &&
-        !draw.version.startsWith("compensation:"),
-    );
-    if (ownDraws.length + count > (campaign.maxPerUser ?? 1000000))
-      fail(409, "キャンペーンの抽選上限に達しています");
-    const limits = await planLimits(q, actor.user);
-    const todayDraws = (await list(q, "draws", actor.user.id)).filter(
-      (draw) =>
-        new Date(Date.parse(draw.at) + 9 * 3600000)
-          .toISOString()
-          .slice(0, 10) === today && !draw.version.startsWith("compensation:"),
-    ).length;
-    if (todayDraws + count > (limits.gachaPerDay ?? 100))
-      fail(409, "本日の抽選上限に達しています");
-    if (wallet.balance < cost) fail(409, "チケットが足りません");
-    const probabilities = await get(q, "probabilities", "current");
-    const items = z.array(prizeSchema).min(1).parse(probabilities.items);
-    if (
-      items.reduce(
-        (total, item) => total + Math.round(item.weight * 100),
-        0,
-      ) !== 10000
-    )
-      fail(409, "提供割合を確認してください");
-    const results = [];
-    for (let index = 0; index < count; index++) {
-      let cursor = randomInt(10000);
-      const prize = items.find((item) => {
-        cursor -= Math.round(item.weight * 100);
-        return cursor < 0;
-      })!;
-      const inventoryKey = prize.id ?? digest(`${prize.title}:${prize.image}`);
-      const inventory = (await get(q, "inventory", inventoryKey)) ?? {
-        remaining: prize.stock,
-      };
-      if (inventory.remaining !== undefined) {
-        if (inventory.remaining < 1)
-          fail(409, "景品の在庫を確認しています。チケットは消費されません");
-        inventory.remaining--;
-        await put(q, "inventory", inventoryKey, inventory);
+  return once(
+    q,
+    `gacha:${actor.user.id}`,
+    requestKey,
+    { count, campaignId },
+    async () => {
+      await activateDueOdds(q);
+      const campaign = await get(
+        q,
+        campaignId === "global" ? "gacha" : "gachaCampaigns",
+        campaignId,
+      );
+      if (!campaign) fail(404, "キャンペーンが見つかりません");
+      await consume(q, actor.user, "gacha.draw", {
+        count,
+        target: campaign.id ?? "global",
+        level: "send",
+      });
+      const today = new Date(Date.now() + 9 * 3600000)
+        .toISOString()
+        .slice(0, 10);
+      if (
+        campaign.status !== "公開" ||
+        today < campaign.start ||
+        today > campaign.end
+      )
+        fail(409, "現在開催中のガチャはありません");
+      const wallet = (await get(q, "wallet", actor.user.id)) ?? { balance: 0 };
+      if (
+        campaign.plan &&
+        campaign.plan !== "Free" &&
+        JSON.parse(actor.user.profile).plan !== campaign.plan
+      )
+        fail(403, "このキャンペーンは対象プラン限定です");
+      if (count > (campaign.maxBatch ?? 10))
+        fail(400, "一度に抽選できる回数を超えています");
+      const cost = count * (campaign.ticketCost ?? 1);
+      const ownDraws = (await list(q, "draws", actor.user.id)).filter(
+        (draw) =>
+          (draw.campaignId ?? "global") === campaignId &&
+          new Date(Date.parse(draw.at) + 9 * 3600000)
+            .toISOString()
+            .slice(0, 10) >= campaign.start &&
+          new Date(Date.parse(draw.at) + 9 * 3600000)
+            .toISOString()
+            .slice(0, 10) <= campaign.end &&
+          !draw.version.startsWith("compensation:"),
+      );
+      if (ownDraws.length + count > (campaign.maxPerUser ?? 1000000))
+        fail(409, "キャンペーンの抽選上限に達しています");
+      const limits = await planLimits(q, actor.user);
+      const todayDraws = (await list(q, "draws", actor.user.id)).filter(
+        (draw) =>
+          new Date(Date.parse(draw.at) + 9 * 3600000)
+            .toISOString()
+            .slice(0, 10) === today &&
+          !draw.version.startsWith("compensation:"),
+      ).length;
+      if (todayDraws + count > (limits.gachaPerDay ?? 100))
+        fail(409, "本日の抽選上限に達しています");
+      if (wallet.balance < cost) fail(409, "チケットが足りません");
+      const probabilities = await campaignOdds(q, campaign);
+      const items = z.array(prizeSchema).min(1).parse(probabilities.items);
+      if (
+        items.reduce(
+          (total, item) => total + Math.round(item.weight * 100),
+          0,
+        ) !== 10000
+      )
+        fail(409, "提供割合を確認してください");
+      const results = [];
+      for (let index = 0; index < count; index++) {
+        let cursor = randomInt(10000);
+        const prize = items.find((item) => {
+          cursor -= Math.round(item.weight * 100);
+          return cursor < 0;
+        })!;
+        const inventoryKey =
+          prize.id ?? digest(`${prize.title}:${prize.image}`);
+        const inventory = (await get(q, "inventory", inventoryKey)) ?? {
+          remaining: prize.stock,
+        };
+        if (inventory.remaining !== undefined) {
+          if (inventory.remaining < 1)
+            fail(409, "景品の在庫を確認しています。チケットは消費されません");
+          inventory.remaining--;
+          await put(q, "inventory", inventoryKey, inventory);
+        }
+        const result = {
+          campaignId,
+          id: id(),
+          prizeId: inventoryKey,
+          title: prize.title,
+          rarity: prize.rarity,
+          image: prize.image,
+          assetId: prize.assetId,
+          kind: prize.kind,
+          at: now(),
+          version: probabilities.version,
+        };
+        await put(q, "draws", result.id, result, actor.user.id);
+        results.push(result);
       }
-      const result = {
-        id: id(),
-        prizeId: inventoryKey,
-        title: prize.title,
-        rarity: prize.rarity,
-        image: prize.image,
-        assetId: prize.assetId,
-        kind: prize.kind,
-        at: now(),
-        version: probabilities.version,
-      };
-      await put(q, "draws", result.id, result, actor.user.id);
-      results.push(result);
+      wallet.balance -= cost;
+      await put(q, "wallet", actor.user.id, wallet, actor.user.id);
+      await put(
+        q,
+        "ticketLedger",
+        id(),
+        {
+          delta: -cost,
+          balance: wallet.balance,
+          reason: "抽選",
+          at: now(),
+          requestKey,
+        },
+        actor.user.id,
+      );
+      return { results, balance: wallet.balance };
+    },
+  );
+}
+
+export async function applyProbabilities(
+  q: Query,
+  after: unknown,
+  version = id(),
+) {
+  const items = z.array(prizeSchema).min(1).max(100).parse(after);
+  if (
+    items.reduce((sum, item) => sum + Math.round(item.weight * 100), 0) !==
+    10000
+  )
+    fail(400, "提供割合の合計を厳密に100%にしてください");
+  const current = await get(q, "probabilities", "current");
+  for (const prize of items) {
+    if (prize.assetId) {
+      const file = await get(q, "media", prize.assetId);
+      if (
+        !file ||
+        file.kind !== (prize.kind === "voice" ? "rewardAudio" : "rewardImage")
+      )
+        fail(400, "景品に合う専用ファイルをアップロードしてください");
     }
-    wallet.balance -= cost;
-    await put(q, "wallet", actor.user.id, wallet, actor.user.id);
-    await put(
-      q,
-      "ticketLedger",
-      id(),
-      {
-        delta: -cost,
-        balance: wallet.balance,
-        reason: "抽選",
-        at: now(),
-        requestKey,
-      },
-      actor.user.id,
+    const key = prize.id ?? digest(`${prize.title}:${prize.image}`);
+    const old = current.items.find(
+      (item: any) => (item.id ?? digest(`${item.title}:${item.image}`)) === key,
     );
-    return { results, balance: wallet.balance };
-  });
+    const inventory = await get(q, "inventory", key);
+    if (prize.stock !== old?.stock) {
+      const distributed =
+        old?.stock !== undefined && inventory?.remaining !== undefined
+          ? old.stock - inventory.remaining
+          : (await list(q, "draws")).filter(
+              (draw) =>
+                draw.prizeId === key ||
+                (!draw.prizeId &&
+                  draw.title === prize.title &&
+                  draw.image === prize.image),
+            ).length;
+      if (prize.stock !== undefined && prize.stock < distributed)
+        fail(400, "在庫総数は配布済みの数量以上にしてください");
+      await put(q, "inventory", key, {
+        remaining:
+          prize.stock === undefined ? undefined : prize.stock - distributed,
+      });
+    }
+  }
+  if (current.items.length)
+    await put(q, "probabilityVersions", current.version, {
+      ...current,
+      at: now(),
+    });
+  await put(q, "probabilities", "current", { version, items, at: now() });
 }

@@ -25,8 +25,16 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck && pnpm typecheck:api && pnpm test && pnpm test:api
+      - run: pnpm typecheck && pnpm typecheck:api && pnpm test && pnpm test:security && pnpm test:api && pnpm test:load
+      - run: pnpm generate:client && git diff --exit-code docs/openapi.json apps/member/src/generated/api-client.ts
+      - name: Audit dependencies and verify documented source mitigations
+        run: |
+          pnpm audit --json > .local/dependency-audit.json || true
+          node scripts/check-audit.mjs .local/dependency-audit.json
       - run: pnpm test:api
+        env:
+          MANGUMI_TEST_DATABASE_URL: mysql://root:mangumi-ci-tests-only@127.0.0.1:58468/mangumi_test
+      - run: pnpm test:load
         env:
           MANGUMI_TEST_DATABASE_URL: mysql://root:mangumi-ci-tests-only@127.0.0.1:58468/mangumi_test
       - run: pnpm build:live
@@ -48,13 +56,12 @@ jobs:
         env:
           MANGUMI_TEST_LIVEKIT_URL: ws://127.0.0.1:17880
       - if: failure()
-        run: docker logs mangumi-voice-ci > .local/livekit-ci.log 2>&1 || true
+        run: mkdir -p apps/member/test-results-live && docker logs mangumi-voice-ci > apps/member/test-results-live/livekit-ci.log 2>&1 || true
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: connected-app-failures
           path: |
             apps/member/test-results-live
-            .local/livekit-ci.log
       - if: always()
         run: docker stop mangumi-voice-ci || true

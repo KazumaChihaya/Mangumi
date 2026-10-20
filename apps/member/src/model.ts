@@ -1,4 +1,12 @@
 export type Schedule = {
+  timezone?: string;
+  startsAt?: string;
+  endAt?: string;
+  publishAt?: string;
+  category?: string;
+  important?: boolean;
+  seriesId?: string;
+  reminderMinutes?: number[];
   id: string;
   title: string;
   date: string;
@@ -40,6 +48,7 @@ export type Draw = {
   version: string;
 };
 export type DemoState = {
+  featureNames?: Record<string, string>;
   entitlements?: Record<string, boolean>;
   profile: {
     name: string;
@@ -165,6 +174,7 @@ export type DemoState = {
   adminAuthenticated: boolean;
   support: { id: string; subject: string; body: string; status: string }[];
   gacha: {
+    id?: string;
     title: string;
     status: string;
     start: string;

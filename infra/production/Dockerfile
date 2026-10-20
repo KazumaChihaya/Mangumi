@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install --yes --no-install-recommends ffmpeg ca-ce
 FROM base AS build
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/member/package.json ./apps/member/package.json
 RUN --mount=type=cache,id=mangumi-pnpm,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
@@ -14,7 +15,7 @@ FROM base AS application
 WORKDIR /app
 COPY --from=build --chown=node:node /runtime/api ./apps/api
 COPY --from=build --chown=node:node /app/apps/member/dist-live ./apps/member/dist-live
-COPY --from=build --chown=node:node /app/apps/member/src/model.ts /app/apps/member/src/features.ts ./apps/member/src/
+COPY --from=build --chown=node:node /app/apps/member/src/model.ts /app/apps/member/src/features.ts /app/apps/member/src/dates.ts ./apps/member/src/
 ENV NODE_ENV=production PORT=3001 WEB_ROOT=/app/apps/member/dist-live UPLOAD_DIR=/data/uploads FFPROBE_PATH=/usr/bin/ffprobe
 RUN mkdir -p /data/uploads && chown -R node:node /data
 USER node

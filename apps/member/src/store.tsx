@@ -29,6 +29,7 @@ type Store = {
   role: string;
   userId: string | null;
   refresh: () => Promise<void>;
+  selectCampaign: (id: string) => Promise<void>;
   toast: string;
   notify: (text: string, cue?: Cue) => void;
   sound: boolean;
@@ -48,6 +49,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState("guest");
   const [userId, setUserId] = useState<string | null>(null);
   const pending = useRef<Promise<unknown>>(Promise.resolve());
+  const campaign = useRef(
+    typeof location === "undefined"
+      ? "global"
+      : (new URLSearchParams(location.search).get("campaign") ?? "global"),
+  );
   function accept(next: DemoState) {
     const current = ref.current;
     const merged = {
@@ -70,7 +76,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         state: DemoState;
         role: string;
         userId: string | null;
-      }>("/state");
+      }>(`/state?campaign=${encodeURIComponent(campaign.current)}`);
       accept(result.state);
       setRole(result.role);
       setUserId(result.userId);
@@ -175,7 +181,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           const result = await api<{ state: DemoState }>(
-            "/commands",
+            `/commands?campaign=${encodeURIComponent(campaign.current)}`,
             {
               changes,
               action: action ?? "利用者設定変更",
@@ -227,7 +233,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (liveMode) {
       const response = await api<{ results: Draw[]; balance: number }>(
         "/gacha/draw",
-        { count },
+        { count, campaignId: campaign.current },
         "POST",
         "member",
         crypto.randomUUID(),
@@ -272,6 +278,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     role,
     userId,
     refresh,
+    selectCampaign: async (id) => {
+      campaign.current = id;
+      await refresh();
+    },
     state,
     update,
     toast,

@@ -16,6 +16,12 @@ import {
 import { yen } from "../model";
 import { useResource } from "./hooks";
 import { LiveVoice } from "./Voice";
+import { LiveNotifications } from "./Notifications";
+import { LiveRetention } from "./Retention";
+import { LiveRevenue } from "./Revenue";
+import { LiveInstallGuides } from "./InstallGuides";
+import { LiveMonitoring, LiveAudit } from "./Monitoring";
+import { LiveEmailTemplates } from "./EmailTemplates";
 
 export function adminScreenAllowed(screen: Screen, role: string) {
   if (role === "super") return true;
@@ -74,6 +80,11 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
     );
     await refresh();
   };
+  if (number === 85) return <LiveRetention />;
+  if (number === 82) return <LiveEmailTemplates />;
+  if (number === 89) return <LiveMonitoring />;
+  if (number === 94 || number === 95) return <LiveAudit />;
+  if ([60, 61, 65, 66].includes(number)) return <LiveRevenue />;
   if (number <= 10)
     return (
       <>
@@ -117,64 +128,7 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
         </Panel>
       </>
     );
-  if (number >= 32 && number <= 39)
-    return (
-      <>
-        <Panel title="運営通知を配信">
-          <Form
-            submit="配信を予約・開始"
-            onSubmit={async (values) => {
-              await api(
-                "/admin/notifications",
-                {
-                  title: values.title,
-                  body: values.body,
-                  plan: values.plan,
-                  ...(values.scheduledAt
-                    ? {
-                        scheduledAt: new Date(values.scheduledAt).toISOString(),
-                      }
-                    : {}),
-                },
-                "POST",
-                "admin",
-                crypto.randomUUID(),
-              );
-              notify("通知を受け付けました");
-              await jobs.reload();
-            }}
-          >
-            <Field name="title" label="通知タイトル" required />
-            <Field name="body" label="通知本文" multiline required />
-            <Select
-              name="plan"
-              label="対象プラン（Freeは全会員）"
-              options={state.plans.map((plan) => plan.name)}
-            />
-            <Field
-              name="scheduledAt"
-              label="配信日時（空欄は即時）"
-              type="datetime-local"
-            />
-            <label className="check-row">
-              <input type="checkbox" required />
-              配信先と内容を確認しました
-            </label>
-          </Form>
-        </Panel>
-        <Panel title="配信状況">
-          <Table
-            columns={["種類", "予定日時", "状態", "試行回数"]}
-            rows={(jobs.data ?? []).map((job) => [
-              job.kind,
-              new Date(job.due_at).toLocaleString("ja-JP"),
-              job.state,
-              job.attempts,
-            ])}
-          />
-        </Panel>
-      </>
-    );
+  if (number >= 32 && number <= 39) return <LiveNotifications />;
   if (number >= 45 && number <= 51)
     return (
       <>
@@ -194,11 +148,57 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
                 listeners: 0,
                 status: values.status,
                 plan: values.plan,
+                maxMinutes: Number(values.maxMinutes),
+                maxListeners: Number(values.maxListeners),
+                maxSpeakers: Number(values.maxSpeakers),
+                description: values.description,
+                visibility: values.visibility,
+                invited: values.invited.split(/[,\s]+/).filter(Boolean),
+                reactions: values.reactions === "有効",
               };
               await command("rooms", entry.id, entry, "ルームを新規登録");
             }}
           >
             <Field name="title" label="ルーム名" required />
+            <Field name="description" label="ルームの説明" multiline />
+            <Field
+              name="maxMinutes"
+              label="最大時間（分）"
+              type="number"
+              min={1}
+              max={1440}
+              value={120}
+              required
+            />
+            <Field
+              name="maxListeners"
+              label="最大参加者数"
+              type="number"
+              min={1}
+              max={10000}
+              value={state.settings.roomLimit}
+              required
+            />
+            <Field
+              name="maxSpeakers"
+              label="最大登壇者数"
+              type="number"
+              min={1}
+              max={50}
+              value={8}
+              required
+            />
+            <Select
+              name="visibility"
+              label="公開範囲"
+              options={["public", "plan", "invite"]}
+            />
+            <Field name="invited" label="招待する会員ID（カンマ区切り）" />
+            <Select
+              name="reactions"
+              label="リアクション"
+              options={["有効", "無効"]}
+            />
             <label className="field">
               <span>ホスト</span>
               <select name="host" required>
@@ -413,10 +413,21 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
                   maintenance: values.maintenance === "メンテナンス中",
                   maintenanceText: values.maintenanceText,
                   ngWords: values.ngWords,
+                  duplicateNicknames: values.duplicateNicknames === "許可",
+                  dmAllowedHosts: values.dmAllowedHosts
+                    .split(/[,\s]+/)
+                    .filter(Boolean),
                   roomLimit: Number(values.roomLimit),
                   audioSeconds: Number(values.audioSeconds),
                   retention: Number(values.retention),
                   tipMax: Number(values.tipMax),
+                  tipMin: Number(values.tipMin),
+                  tipDaily: Number(values.tipDaily),
+                  tipMonthly: Number(values.tipMonthly),
+                  tipPresets: values.tipPresets
+                    .split(/[,\s]+/)
+                    .filter(Boolean)
+                    .map(Number),
                   dmPolicy: values.dmPolicy,
                   billingEnabled: values.billing === "受付中",
                   adminSessionMinutes: Number(values.adminSessionMinutes || 30),
@@ -445,6 +456,21 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
               name="ngWords"
               label="禁止する言葉（カンマ区切り）"
               value={state.settings.ngWords}
+            />
+            <Select
+              name="duplicateNicknames"
+              label="ニックネームの重複"
+              options={["許可", "不可"]}
+              value={
+                (state.settings as any).duplicateNicknames === false
+                  ? "不可"
+                  : "許可"
+              }
+            />
+            <Field
+              name="dmAllowedHosts"
+              label="DMで許可するリンクのホスト（カンマ区切り、空欄はURL不可）"
+              value={((state.settings as any).dmAllowedHosts ?? []).join(",")}
             />
             <Field
               name="adminSessionMinutes"
@@ -487,6 +513,40 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
               label="応援金額の1回上限（円）"
               type="number"
               value={state.settings.tipMax}
+              required
+            />
+            <Field
+              name="tipMin"
+              label="応援金額の最低額（円）"
+              type="number"
+              min={100}
+              value={(state.settings as any).tipMin ?? 100}
+              required
+            />
+            <Field
+              name="tipDaily"
+              label="1日の応援金額上限（円）"
+              type="number"
+              value={
+                (state.settings as any).tipDaily ?? state.settings.tipMax * 5
+              }
+              required
+            />
+            <Field
+              name="tipMonthly"
+              label="1か月の応援金額上限（円）"
+              type="number"
+              value={
+                (state.settings as any).tipMonthly ?? state.settings.tipMax * 20
+              }
+              required
+            />
+            <Field
+              name="tipPresets"
+              label="金額候補（円・カンマ区切り）"
+              value={(
+                (state.settings as any).tipPresets ?? [500, 1000, 3000]
+              ).join(",")}
               required
             />
             <Select
@@ -617,6 +677,7 @@ export function LiveBrand() {
   const [ogp, setOgp] = useState("");
   const [emailLogo, setEmailLogo] = useState("");
   const [installGuide, setInstallGuide] = useState("");
+  const [notificationIcon, setNotificationIcon] = useState("");
   return (
     <>
       <Panel title="ブランド・公開設定">
@@ -629,6 +690,15 @@ export function LiveBrand() {
                 short: values.short,
                 description: values.description,
                 accent: values.accent,
+                background: values.background,
+                button: values.button,
+                logoAlt: values.logoAlt,
+                ...(notificationIcon || current.data?.notificationIcon
+                  ? {
+                      notificationIcon:
+                        notificationIcon || current.data.notificationIcon,
+                    }
+                  : {}),
                 ...(logo || current.data?.logo
                   ? { logo: logo || current.data.logo }
                   : {}),
@@ -685,12 +755,30 @@ export function LiveBrand() {
             type="color"
             value={state.settings.accent}
           />
+          <Field
+            name="background"
+            label="背景色"
+            type="color"
+            value={current.data?.background ?? "#050509"}
+          />
+          <Field
+            name="button"
+            label="主要ボタン色"
+            type="color"
+            value={current.data?.button ?? "#ffd45c"}
+          />
+          <Field
+            name="logoAlt"
+            label="ロゴの代替テキスト"
+            value={current.data?.logoAlt ?? state.settings.name}
+          />
           {[
             ["ロゴ", setLogo],
             ["アイコン", setIcon],
             ["共有時の画像（OGP）", setOgp],
             ["メールのロゴ", setEmailLogo],
             ["インストール案内画像", setInstallGuide],
+            ["通知アイコン", setNotificationIcon],
           ].map(([label, setter]) => (
             <label key={String(label)} className="field">
               <span>{String(label)}</span>
@@ -750,6 +838,7 @@ export function LiveBrand() {
           <Field name="reason" label="変更理由" required />
         </Form>
       </Panel>
+      <LiveInstallGuides />
       <Panel title="過去の設定">
         {versions.data?.map((version) => (
           <Form

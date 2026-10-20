@@ -38,6 +38,8 @@ pnpm --filter @mangumi/api admin:create
 
 ## 本番へ配置
 
+さくらVPSを使用する場合は [さくらVPSへの配置](sakura-deployment.md) に、DNS・通信ポート・Docker・鍵生成・初期管理者・更新の手順をまとめている。
+
 1. アプリ用のドメイン、VPS、トランザクションメール、Stripe、音声基盤を用意する。
 2. `.env.example` を元にVPS上で `.env` を作る。
 3. `pnpm --filter @mangumi/api keys` で、暗号鍵、VAPID、URLに使用できるDBパスワードを `.env.keys.generated` へ生成する。値はコンソールに表示しない。必要な値を `.env` へ移し、暗号鍵を別の安全な場所にも保管する。
@@ -58,7 +60,7 @@ API・DBのポートはホストに公開せず、Caddyだけ80/443を公開す�
 | Stripe   | SECRET_KEY、WEBHOOK_SECRET、プランのPrice ID | `/api/webhooks/stripe` の署名検証、金額・顧客の照合  |
 | 音声     | LIVEKIT_URL／API_KEY／API_SECRET             | `/api/webhooks/livekit`、TLS、TURN、異なる回線       |
 
-Stripeの対象イベントは `payment_intent.succeeded`、`payment_intent.payment_failed`、`payment_intent.canceled`、`checkout.session.completed`、`checkout.session.expired`、`customer.subscription.*`、`charge.refunded`、`refund.updated`、`refund.failed`、`charge.dispute.created`、`charge.dispute.closed`。クライアントの戻りURLだけでは決済成功・プラン付与を確定しない。
+Stripeの対象イベントは `payment_intent.succeeded`、`payment_intent.payment_failed`、`payment_intent.canceled`、`checkout.session.completed`、`checkout.session.expired`、`customer.subscription.*`、`charge.succeeded`、`charge.updated`、`charge.refunded`、`invoice.paid`、`refund.updated`、`refund.failed`、`charge.dispute.created`、`charge.dispute.closed`。クライアントの戻りURLだけでは決済成功・プラン付与を確定しない。
 
 音声ホストの切断検知には署名付きLiveKit Webhookが必要。録音は無効。別VPSまたはLiveKit Cloudを使用する。[音声基盤の設定](../infra/livekit/README.md)も参照する。
 
@@ -76,32 +78,57 @@ Stripeの対象イベントは `payment_intent.succeeded`、`payment_intent.paym
 
 実運用のバックアップ先、保持期間、RPO／RTOと復旧訓練は未確定。バックアップの復号・復元を実環境で確認するまで、復旧保証済みと扱わない。
 
-## 実装範囲と残作業
+## 実装範囲と接続時の確認
 
-| 分野             | 実装した主要処理                                                                                                                        | 残る設定・拡張・検証                                                   |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 認証             | 写真付き登録、規約版、Argon2id、確認・再送・メール変更・再設定、端末失効、退会                                                          | 本番SMTP、事業者の規約・年齢方針、実機                                 |
-| 管理             | MFA・復旧コード、5ロール、理由付き監査、会員検索・ページング、予約プラン変更、期限付き停止、開示と対応記録                              | 組織の本人確認・削除運用、監査の別保管                                 |
-| PWA              | 初回端末別案内、Manifest・アイコン、オフライン画面、更新ボタン、通知購読                                                                | iPhone／Android実機、インストール更新の受入                            |
-| 配信・ストーリー | 予定CRUD、繰り返し作成、変更通知、公開時刻、対象プラン、24時間期限・ハイライト、画像／短い動画、既読                                    | 端末タイムゾーンの完全対応、高度な検索・集計                           |
-| 通知             | DBキュー、原子的取得、再試行、無効購読削除、サイレント時間、ミュート・ブロック、予約、クリック                                          | 実配送、テンプレートUI・高度な対象抽出、事業者障害時の重複評価         |
-| DM               | 会員と公式の1対1、文字、録音アップロードと再生、既読、取消、ブロック、証拠付き通報、署名付き音声、履歴の追加読込                        | 保存期間に沿った自動消去                                               |
-| 音声             | 公式作成・予約開始、実音声、登壇、マイク制御、共同ホスト、退出・BAN、リアクション、ホスト不在終了                                       | TURN・回線切替・負荷・切断復旧の実環境試験                             |
-| 決済             | Hosted Checkout、カード登録、月／年額・体験、Webhook確定、契約管理、投げ銭、MFA付き返金、CSV、異議申立て状態                            | Stripe実契約、会計上の手数料・期間別分析、運用確定                     |
-| ガチャ           | サーバー乱数、0.01%単位の割合、確率版、在庫、原子的消費、履歴・補填・獲得ファイル、日次配布、対象プラン・費用・上限、フレーム装着・解除 | 高度なキャンペーン・予定版、提供条件の確定                             |
-| プラン           | Free保護、機能のAPI判定、DM／抽選の日次上限、音声秒数、期限付き個別権限                                                                 | 仕様書の汎用的な週次・月次・対象者別の全上限設定                       |
-| ブランド         | ロゴ・アイコン・OGP・メール用素材・案内画像、公開・予約・復元、法定リンク                                                               | メール用素材のHTML適用、各OSキャッシュの確認                           |
-| 配置             | Docker、Caddy、MariaDB、暗号化バックアップの実行スクリプト、OpenAPIのルート・主要モデル                                                 | 本番配置、全APIの詳細なOpenAPI・生成SDK、負荷・復旧訓練                |
-| iOS／Android     | 共通モデルとAPI境界                                                                                                                     | Phase 6のネイティブ描画、StoreKit／Play Billing、APNs／FCM、ストア審査 |
+初回提供のWeb／PWA（Phase 1〜5）の利用者画面と管理画面を実装している。Phase 6は仕様書どおり将来のストア展開であり、ネイティブ版の完成・審査済みを意味しない。
 
-全ページの表示テストと、全機能の本番受入は別の確認事項。上表の残作業があるため「全機能の本番運用が完成した」状態とは扱わない。管理画面の保存期間は現在設定値として保存し、自動消去はまだ実行しない。退会・削除対応ではログインとプロフィールを無効化し、監査・決済・通報・DMの保持は運営の確定した方針に基づき別途処理する。
+| 分野 | 実装した処理 |
+| --- | --- |
+| 認証・会員 | 写真付き登録、規約版、メール確認・再送・変更・再設定、Argon2id、端末失効、退会、MFAと復旧、5管理ロール、予約プラン変更、期限付き停止、開示・訂正・削除対応 |
+| PWA・ブランド | オフライン画面、更新ボタン、通知購読、端末・ブラウザ・OSバージョン別の画像付き案内、案内の公開順と最終確認日、ロゴ・色・通知アイコン・OGP・HTMLメール、予約公開・復元 |
+| 配信・ストーリー | 予定CRUDと繰り返し、UTC保存と端末時刻表示、夏時間検証、予約公開、変更通知、対象プラン、期限・ハイライト、画像・短い動画・リンク、既読・閲覧者数 |
+| 通知 | テンプレート、属性・プラン・許可状態・最終利用・個別会員の抽出と事前確認、本人へのテスト送信、即時・予約・取消、小分けジョブ、再試行、失敗理由・クリック、種別設定・サイレント時間・ミュート・ブロック |
+| DM | 公式との1対1、文字・録音・再生、既読・取消・自分から非表示、許可URL、ブロック・通報・証拠保全・署名付き音声、履歴追加読込、自動削除 |
+| 音声 | LiveKit実音声、公式の作成と予約開始、公開・プラン・招待限定、人数・最大時間、登壇・共同ホスト・ミュート・退出・BAN・リアクション、再接続とミニプレイヤー、品質診断。録音は初期仕様の無効を維持 |
+| プラン | Free保護、登録済み機能キー、表示名・説明、権限レベル、日・週・月の利用回数、対象ID、同時参加・作成数、音声容量・秒数・保存日数、期限付き個別権限、月額・年額・体験・申込期間・解約方針 |
+| 決済 | Stripe Hosted Checkout、カード登録、月・年契約、Webhookによる確定、本人の解約、金額候補・最低額・日月上限、MFA付き返金、異議申立て、期間・受取人別売上CSV、取得済み手数料と未確定件数。遅いCheckout応答中もDBの業務ロックを保持しない |
+| ガチャ | サーバー乱数、0.01%単位の割合、確率版の予約・取消・履歴、並行キャンペーンと固定確率版、在庫・原子的消費・再送防止、補填、獲得者用ファイル、日次配布、フレーム装着・解除 |
+| 運用 | 検索・並替・ページング・CSV、監査の変更前後比較、保存期間のプレビュー・証拠保持・ファイル削除、失敗ジョブ再試行、API p95・DB・音声品質監視、暗号化バックアップと空環境への復元、OpenAPIと型付きクライアント生成 |
+
+本番接続にはMangumi専用のVPS・ドメイン、SMTP・VAPID・Stripe・LiveKitの設定が必要。実際の事業者アカウント、運営者の規約・年齢方針、iPhone／Androidの実機、別回線のTURN、運用するバックアップ先と保持期間・RPO／RTOを接続時に確認する。ARROWの環境は使用しない。
+
+### 保存期間
+
+`/admin/A085` で方針・削除対象・処理履歴を確認する。初期状態は自動削除OFF。ONにすると1時間ごとに処理し、手動実行も確認入力が必要。調査中・保持中の通報、景品とコレクション、決済・監査の参照を保持する。ファイル削除はDBで参照を外してから永続キューで実行し、プロセス停止後も再開する。
+
+### 暗号化バックアップの実装と復旧訓練
+
+外部コマンドを要しないAES-256-GCMのストリーム形式も使用できる。`BACKUP_KEY` は32バイトのbase64で、`keys` コマンドで生成する。バックアップと別の場所へ保管する。
+
+```powershell
+$env:BACKUP_KEY = '<サーバーの秘密情報から設定>'
+$env:BACKUP_FILE = '<バックアップ先の絶対パス>.mgbak'
+pnpm --filter @mangumi/api exec tsx src/cli.ts backup
+```
+
+作成前に管理画面でメンテナンスを有効にする。DBと参照ファイルを同じトランザクション内で読み出し、既存の出力ファイルを上書きしない。Dockerでは `node --import tsx src/cli.ts backup` を使う。
+
+復元では `RESTORE_DATABASE_URL` に `mangumi_restore_` で始まる新しいDB名、または `RESTORE_SQLITE_PATH` に新しいSQLiteを指定し、`RESTORE_UPLOAD_DIR` に別のファイル領域を指定して `src/cli.ts restore` を実行する。既存レコード・同名ファイルへの上書きは拒否する。認証タグを検証してからコミットし、失敗時にはDBをロールバックする。
+
+自動試験でDB・画像の暗号化と復元、改ざん拒否、部分データを残さないことを確認する。本番の別障害領域への保管・実回線での復旧時間は、配置先で測定する。
+
+### 運用アラート
+
+`/admin/A089` で通知先（最大5件）・API p95・エラー率・最小サンプル数・失敗ジョブ数・継続通知間隔を設定する。初期は無効。直近5分のAPIサンプル（ルートごとに最大500件）を1分ごとに判定し、異常・回復を永続メールジョブへ登録する。SMTPの失敗はジョブの再試行対象になる。アプリが停止した状態は自身では検知できないため、別ホストの死活監視からHTTPSの `/api/health` と `/api/readiness` を監視し、通知先へ接続する。readinessは設定の有無を示し、SMTP等への実送信試験の代わりにはならない。
 
 ## 検証
 
-`pnpm typecheck`、`pnpm typecheck:api`、`pnpm test`、`pnpm test:api`、`pnpm build:live`、`pnpm test:live` を実行する。APIテストは既定で隔離SQLiteを使用する。MariaDBの試験は、127.0.0.1の **mangumi_test** だけを対象に `MANGUMI_TEST_DATABASE_URL` を設定する。テストはこのDBの既知のテーブルを初期化する。
+`pnpm typecheck`、`pnpm typecheck:api`、`pnpm test`、`pnpm test:security`、`pnpm test:api`、`pnpm test:load`、`pnpm build:live`、`pnpm test:live` を使用する。
 
-ブラウザ試験は合成アカウント・ローカルメール受け皿を専用プロセスで作り、会員登録、別アカウントへの反映、権限、DM録音、全204項目を確認する。本番アカウント・本番決済には接続しない。`MANGUMI_TEST_LIVEKIT_URL` を設定すると、実LiveKitを使った2ブラウザの音声と登壇・降壇・BANを検証する。CIはこの音声試験も実行する。
+API試験は隔離SQLite、MariaDB試験は127.0.0.1の **mangumi_test** のみを対象にする。ブラウザ試験は合成会員・ローカルメール受け皿を使用する。`MANGUMI_TEST_LIVEKIT_URL` の指定時は2ブラウザで実際の音声と登壇・降壇・BANを確認する。
 
-`pnpm --filter @mangumi/api openapi` は `docs/openapi.json` を更新する。実行時の `/api/openapi.json` からも確認できる。
+負荷試験の条件は、合成会員200人・配信予定30件・通常画面API200リクエスト・同時8件。ローカル実測のp95はSQLite約15ms、MariaDB約159msで500ms未満。配置先のCPU・回線・同時利用数に対する保証値ではない。
 
-依存監査では、Expo側の依存に [uuid](https://github.com/advisories/GHSA-w5hq-g745-h8pq)、[decode-uri-component](https://github.com/advisories/GHSA-vcc3-ghjq-m6fr)、[node-forge](https://github.com/advisories/GHSA-86w9-cpqp-85rv)、[braces](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) の4件が残る。本番APIコンテナからこれらのビルド用依存は除外したが、公開Webバンドルも含めた修正・影響確認は本番受入前の残作業。修正版がESMへ変更される依存もあるため、互換性を確認せずに一括上書きしない。
+`pnpm generate:client` は `docs/openapi.json` と `apps/member/src/generated/api-client.ts` を更新する。リクエスト形、共通エラー、主要レスポンス、Cookie・CSRF・再送キーを記述し、CIで生成結果との差分を検査する。可変の管理データは拡張可能なオブジェクトとして定義する。
+
+依存ライブラリの修正・回帰試験・上流勧告が残る2件の扱いは [セキュリティ修正](security-patches.md) を参照する。監査結果を無条件に無視しない。

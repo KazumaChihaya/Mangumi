@@ -3,6 +3,9 @@ import { api } from "../api";
 import { useStore } from "../store";
 import { Button, Field, Form, Panel, Select, Row } from "../ui";
 import { yen } from "../model";
+import { features as featureRegistry } from "../features";
+import { useResource } from "./hooks";
+import { datetimeInput } from "../dates";
 const features = [
   "配信予定",
   "ストーリー",
@@ -13,6 +16,8 @@ const features = [
 ];
 export function LivePlansAdmin() {
   const { state, refresh, notify } = useStore();
+  const definitions = useResource<any[]>("/features", 0);
+  const counts = useResource<Record<string, number>>("/admin/plan-counts", 0);
   const [editing, setEditing] = useState<any>();
   const [selected, setSelected] = useState<string[]>(features.slice(0, 5));
   return (
@@ -22,6 +27,7 @@ export function LivePlansAdmin() {
           <Row
             key={plan.id}
             title={`${plan.name} · ${yen(plan.price)}/月`}
+            sub={`加入者 ${counts.data?.[plan.id] ?? 0}人`}
             end={
               <Button
                 onClick={() => {
@@ -43,6 +49,45 @@ export function LivePlansAdmin() {
         >
           新しいプラン
         </Button>
+        {state.plans
+          .filter((plan) => plan.name !== "Free")
+          .map((plan) => (
+            <details key={plan.id}>
+              <summary>{plan.name}を削除</summary>
+              <Form
+                submit="このプランを削除"
+                tone="danger"
+                onSubmit={async (values) => {
+                  await api(
+                    "/commands",
+                    {
+                      changes: [
+                        {
+                          resource: "plans",
+                          id: plan.id,
+                          before: plan,
+                          after: null,
+                        },
+                      ],
+                      action: "プラン削除",
+                      reason: values.reason,
+                    },
+                    "POST",
+                    "admin",
+                    crypto.randomUUID(),
+                  );
+                  await refresh();
+                  await counts.reload();
+                }}
+              >
+                <Field name="reason" label="削除理由" required />
+                <label className="check-row">
+                  <input type="checkbox" required />
+                  所属会員がいないことを確認しました
+                </label>
+              </Form>
+            </details>
+          ))}
       </Panel>
       <Panel title={editing ? "プランを編集" : "プランを作成"}>
         <Form
@@ -60,6 +105,39 @@ export function LivePlansAdmin() {
               dmPerDay: Number(values.dmPerDay),
               audioSeconds: Number(values.audioSeconds),
               gachaPerDay: Number(values.gachaPerDay),
+              color: values.color,
+              badge: values.badge,
+              order: Number(values.order),
+              cancellation: values.cancellation,
+              policies: Object.fromEntries(
+                Object.keys(featureRegistry).map((key) => [
+                  key,
+                  {
+                    allowed: values[`${key}.allowed`] === "利用可",
+                    level: values[`${key}.level`],
+                    ...Object.fromEntries(
+                      [
+                        "day",
+                        "week",
+                        "month",
+                        "concurrent",
+                        "created",
+                        "bytes",
+                        "seconds",
+                        "retentionDays",
+                      ]
+                        .filter((field) => values[`${key}.${field}`] !== "")
+                        .map((field) => [
+                          field,
+                          Number(values[`${key}.${field}`]),
+                        ]),
+                    ),
+                    targets: values[`${key}.targets`]
+                      .split(/[\s,]+/)
+                      .filter(Boolean),
+                  },
+                ]),
+              ),
               ...(values.yearPrice
                 ? { yearPrice: Number(values.yearPrice) }
                 : {}),
@@ -186,10 +264,140 @@ export function LivePlansAdmin() {
             options={["公開", "非公開"]}
             value={editing?.published === false ? "非公開" : "公開"}
           />
-          <Field name="opensAt" label="申込開始日時" type="datetime-local" />
-          <Field name="closesAt" label="申込終了日時" type="datetime-local" />
+          <Field
+            name="opensAt"
+            label="申込開始日時"
+            type="datetime-local"
+            value={datetimeInput(editing?.opensAt)}
+          />
+          <Field
+            name="closesAt"
+            label="申込終了日時"
+            type="datetime-local"
+            value={datetimeInput(editing?.closesAt)}
+          />
           <Field name="reason" label="変更理由" required />
+          <Field
+            name="color"
+            label="プランの色"
+            type="color"
+            value={(editing as any)?.color ?? "#ffd45c"}
+          />
+          <Field
+            name="badge"
+            label="バッジ"
+            value={(editing as any)?.badge ?? ""}
+          />
+          <Field
+            name="order"
+            label="表示順"
+            type="number"
+            value={(editing as any)?.order ?? 0}
+            min={0}
+          />
+          <Select
+            name="cancellation"
+            label="解約時の扱い"
+            options={["period_end", "immediate"]}
+            value={(editing as any)?.cancellation ?? "period_end"}
+          />
+          {Object.entries(featureRegistry).map(([key, label]) => {
+            const policy = (editing as any)?.policies?.[key];
+            const aliases: Record<string, string> = {
+              "notification.receive": "配信予定",
+              "dm.audio.send": "公式DM",
+              "voice.speak": "音声ルーム",
+              "voice.create": "音声ルーム",
+            };
+            return (
+              <details key={key}>
+                <summary>
+                  {state.featureNames?.[key] ?? label}の権限・上限
+                </summary>
+                <Select
+                  name={`${key}.allowed`}
+                  label="利用可否"
+                  options={["利用可", "利用不可"]}
+                  value={
+                    (policy?.allowed ??
+                    (selected.includes(key) ||
+                      selected.includes(aliases[key] ?? label)))
+                      ? "利用可"
+                      : "利用不可"
+                  }
+                />
+                <Select
+                  name={`${key}.level`}
+                  label="権限レベル（閲覧・送信・作成・管理）"
+                  options={["view", "send", "create", "manage"]}
+                  value={policy?.level ?? "manage"}
+                />
+                {Object.entries({
+                  day: "1日の回数",
+                  week: "1週間の回数（月曜開始）",
+                  month: "1か月の回数",
+                  concurrent: "同時利用数",
+                  created: "作成数",
+                  bytes: "ファイル容量（バイト）",
+                  seconds: "時間（秒）",
+                  retentionDays: "保存期間（日）",
+                }).map(([field, text]) => (
+                  <Field
+                    key={field}
+                    name={`${key}.${field}`}
+                    label={`${text}・空欄は追加制限なし`}
+                    type="number"
+                    min={
+                      field === "bytes" ||
+                      field === "seconds" ||
+                      field === "retentionDays"
+                        ? 1
+                        : 0
+                    }
+                    value={policy?.[field]}
+                  />
+                ))}
+                <Field
+                  name={`${key}.targets`}
+                  label="対象の公式配信者・キャンペーンID（カンマ区切り、空欄は全て）"
+                  value={policy?.targets?.join(",") ?? ""}
+                />
+              </details>
+            );
+          })}
         </Form>
+      </Panel>
+      <Panel title="機能の表示名と説明">
+        {definitions.data?.map((feature) => (
+          <details key={feature.key}>
+            <summary>
+              {feature.name}（{feature.key}）
+            </summary>
+            <Form
+              submit="機能説明を保存"
+              onSubmit={async (v) => {
+                await api("/admin/features", {
+                  feature: {
+                    key: feature.key,
+                    name: v.name,
+                    description: v.description,
+                  },
+                  reason: v.reason,
+                });
+                await definitions.reload();
+              }}
+            >
+              <Field name="name" label="表示名" value={feature.name} required />
+              <Field
+                name="description"
+                label="説明"
+                value={feature.description}
+                multiline
+              />
+              <Field name="reason" label="変更理由" required />
+            </Form>
+          </details>
+        ))}
       </Panel>
       <Panel title="個別の利用権限">
         <Form

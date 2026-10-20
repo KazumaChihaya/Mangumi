@@ -62,7 +62,14 @@ export function Shell({
   return (
     <div
       className={`app-background ${admin ? "admin-background" : ""}`}
-      style={{ "--accent": state.settings.accent } as React.CSSProperties}
+      style={
+        {
+          "--accent": state.settings.accent,
+          "--brand-button": (state.settings as any).button,
+          "--brand-background": (state.settings as any).background,
+          backgroundColor: (state.settings as any).background,
+        } as React.CSSProperties
+      }
     >
       <div className="cabinet-lights" aria-hidden="true">
         {Array.from({ length: 12 }, (_, index) => (

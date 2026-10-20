@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, relative, isAbsolute } from "node:path";
 import Stripe from "stripe";
@@ -24,6 +24,12 @@ import {
   scheduleReminders,
   quietDelay,
 } from "../src/jobs.ts";
+import { retentionPreview, runRetention } from "../src/retention.ts";
+import { wallTimeToISO } from "../../member/src/dates.ts";
+import { activateDueOdds } from "../src/gacha-versions.ts";
+import { brandedEmail } from "../src/email.ts";
+import { createBackup, restoreBackup } from "../src/backup.ts";
+import { checkOperationalAlerts } from "../src/monitoring.ts";
 
 const password = "Mangumi-test-password-42!";
 async function uploadFile(
@@ -224,6 +230,144 @@ async function fixture(persistent = false) {
     },
   };
 }
+test("operational alerts enforce role, thresholds, cooldown, recovery and durable mail delivery", async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login(await f.user("super"), "admin", true),
+      member = await f.login(await f.user());
+    assert.equal(
+      (await f.app.inject({ url: "/api/admin/monitoring", headers: member }))
+        .statusCode,
+      401,
+    );
+    const support = await f.login(await f.user("support"), "admin", true);
+    assert.equal(
+      (await f.app.inject({ url: "/api/admin/monitoring", headers: support }))
+        .statusCode,
+      403,
+    );
+    const policy = {
+      enabled: true,
+      recipients: ["ops@example.test"],
+      p95Ms: 500,
+      errorPercent: 10,
+      minimumRequests: 20,
+      failedJobs: 1,
+      cooldownMinutes: 30,
+    };
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/admin/monitoring",
+          headers: admin,
+          payload: {
+            policy: { ...policy, recipients: [] },
+            reason: "異常通知先の検証",
+          },
+        })
+      ).statusCode,
+      400,
+    );
+    const saved = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/monitoring",
+      headers: admin,
+      payload: { policy, reason: "運用アラートを有効にする" },
+    });
+    assert.equal(saved.statusCode, 200, saved.body);
+    const advance = async () => {
+      const state = await get(f.db, "monitoring", "state");
+      await put(f.db, "monitoring", "state", {
+        ...state,
+        checkedAt: new Date(Date.now() - 70000).toISOString(),
+      });
+    };
+    await checkOperationalAlerts(f.db, [
+      { route: "GET /api/state", requests: 2, errors: 2, p95Ms: 800 },
+    ]);
+    await processJobs(f.db, f.external);
+    assert.equal(f.sent.length, 0, "small samples do not trigger API alerts");
+    await advance();
+    const samples = [
+      { route: "GET /api/state", requests: 20, errors: 3, p95Ms: 800 },
+    ];
+    await checkOperationalAlerts(f.db, samples);
+    await processJobs(f.db, f.external);
+    assert.equal(f.sent.length, 1);
+    assert.equal(f.sent[0].to, "ops@example.test");
+    assert.match(f.sent[0].text, /p95 800ms/);
+    assert.match(f.sent[0].text, /15.0%/);
+    await advance();
+    await checkOperationalAlerts(f.db, samples);
+    await processJobs(f.db, f.external);
+    assert.equal(f.sent.length, 1, "ongoing incident respects cooldown");
+    await advance();
+    await checkOperationalAlerts(f.db, []);
+    await processJobs(f.db, f.external);
+    assert.equal(f.sent.length, 2);
+    assert.match(f.sent[1].subject, /回復/);
+    await advance();
+    await enqueue(f.db, "test-failed-job", "mail", {
+      to: "nobody@example.test",
+    });
+    await f.db.run("UPDATE jobs SET state = 'failed' WHERE id = ?", [
+      "test-failed-job",
+    ]);
+    await checkOperationalAlerts(f.db, []);
+    await processJobs(f.db, f.external);
+    assert.equal(f.sent.length, 3);
+    assert.match(f.sent[2].text, /失敗ジョブ 1件/);
+    const history = await f.app.inject({
+      url: "/api/admin/monitoring",
+      headers: admin,
+    });
+    assert.equal(history.json().history.length, 3);
+    assert.ok(
+      (
+        await f.db.all(
+          "SELECT id FROM audit_logs WHERE action = 'monitoring.policy'",
+        )
+      ).length,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("public HTML includes the current escaped brand title and OGP before JavaScript runs", async () => {
+  const f = await fixture();
+  try {
+    f.config.webRoot = join(f.config.files, "static-web");
+    await mkdir(f.config.webRoot);
+    await writeFile(
+      join(f.config.webRoot, "index.html"),
+      '<!DOCTYPE html><html><head><title data-rh="true"></title><meta name="description" content="old"></head><body>app</body></html>',
+    );
+    const initial = await f.app.inject({ url: "/" });
+    assert.equal(initial.statusCode, 200);
+    assert.ok(initial.body.includes("<title>まんぞうラブ</title>"));
+    await put(f.db, "brand", "current", {
+      name: 'マン組 <Love> & "Fan"',
+      description: "公式 <案内>",
+    });
+    const branded = await f.app.inject({ url: "/" });
+    assert.ok(
+      branded.body.includes(
+        "<title>マン組 &lt;Love&gt; &amp; &quot;Fan&quot;</title>",
+      ),
+    );
+    assert.ok(
+      branded.body.includes(
+        'property="og:title" content="マン組 &lt;Love&gt; &amp; &quot;Fan&quot;"',
+      ),
+    );
+    assert.ok(!branded.body.includes('content="old"'));
+  } finally {
+    await f.close();
+  }
+});
+
 test("registration, one-time email verification, reset and session revocation", async () => {
   const f = await fixture();
   try {
@@ -1631,6 +1775,701 @@ test("only an acquired transparent frame can be applied and the original avatar 
           .profile,
       ).avatar,
       avatar.url,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("feature quotas cover weekly and monthly periods, targets and idempotent retries", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      h = await f.login(fan);
+    await f.db.transaction(async (q) => {
+      const p = await get(q, "plans", "free");
+      await put(q, "plans", "free", {
+        ...p,
+        policies: {
+          "dm.send": {
+            allowed: true,
+            level: "send",
+            week: 1,
+            month: 2,
+            targets: [official.id],
+          },
+        },
+      });
+    });
+    const conversation = await f.app.inject({
+      method: "POST",
+      url: "/api/conversations",
+      headers: h,
+      payload: { peer: official.id },
+    });
+    const url = `/api/conversations/${conversation.json().id}/messages`;
+    const first = await f.app.inject({
+      method: "POST",
+      url,
+      headers: h,
+      payload: { text: "週の最初" },
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    const retry = await f.app.inject({
+      method: "POST",
+      url,
+      headers: h,
+      payload: { text: "週の最初" },
+    });
+    assert.deepEqual(retry.json(), first.json());
+    const exceeded = await f.app.inject({
+      method: "POST",
+      url,
+      headers: { ...h, "idempotency-key": id() },
+      payload: { text: "上限超過" },
+    });
+    assert.equal(exceeded.statusCode, 429, exceeded.body);
+    const counters = await list(f.db, "usage", fan.id);
+    assert.equal(counters.length, 2);
+    assert.ok(counters.every((c) => c.count === 1));
+    const admin = await f.login(await f.user("super"), "admin", true);
+    const p = await get(f.db, "plans", "free");
+    const invalid = await f.app.inject({
+      method: "POST",
+      url: "/api/commands",
+      headers: admin,
+      payload: {
+        changes: [
+          {
+            resource: "plans",
+            id: "free",
+            after: {
+              ...p,
+              policies: { "invented.feature": { allowed: true } },
+            },
+          },
+        ],
+        action: "機能割当",
+        reason: "未知のキーを検証",
+      },
+    });
+    assert.equal(invalid.statusCode, 400);
+  } finally {
+    await f.close();
+  }
+});
+
+test("notification audiences, templates, cancellation and terminal delivery results are real", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      other = await f.user(),
+      admin = await f.login(await f.user("super"), "admin", true);
+    await f.db.transaction(async (q) => {
+      await put(
+        q,
+        "push",
+        "good",
+        {
+          id: "good",
+          subscription: { endpoint: "https://fcm.googleapis.com/good" },
+        },
+        fan.id,
+      );
+      await put(q, "activity", fan.id, { userId: fan.id, at: now() }, fan.id);
+    });
+    const audience = { users: [fan.id, other.id], permission: "subscribed" };
+    const preview = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/notification-audience",
+      headers: admin,
+      payload: audience,
+    });
+    assert.equal(preview.json().count, 1);
+    const template = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/notification-templates",
+      headers: admin,
+      payload: {
+        name: "配信案内",
+        title: "配信開始",
+        body: "お楽しみに",
+        path: "/u/U028",
+        reason: "定例配信の案内",
+      },
+    });
+    assert.equal(template.statusCode, 200, template.body);
+    const created = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/notifications",
+      headers: admin,
+      payload: { title: "配信開始", body: "お楽しみに", audience },
+    });
+    assert.equal(created.statusCode, 200, created.body);
+    await processJobs(f.db, f.external);
+    const campaigns = await f.app.inject({
+      url: "/api/admin/notifications",
+      headers: admin,
+    });
+    const result = campaigns
+      .json()
+      .find((r: any) => r.id === created.json().id);
+    assert.equal(result.status, "完了");
+    assert.equal(result.count, 1);
+    assert.equal(result.sent, 1);
+    assert.equal(result.failed, 0);
+    assert.ok((await get(f.db, "push", "good"))?.lastSuccessAt);
+    const scheduled = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/notifications",
+      headers: { ...admin, "idempotency-key": id() },
+      payload: {
+        title: "予約",
+        body: "取り消す",
+        scheduledAt: new Date(Date.now() + 60000).toISOString(),
+      },
+    });
+    const cancel = await f.app.inject({
+      method: "POST",
+      url: `/api/admin/notifications/${scheduled.json().id}/cancel`,
+      headers: admin,
+      payload: { reason: "公開時期を変更するため" },
+    });
+    assert.equal(cancel.statusCode, 200, cancel.body);
+    assert.equal(
+      (await get(f.db, "campaigns", scheduled.json().id))?.status,
+      "取消",
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("retention deletes expired content and orphan files but holds report evidence and owned rewards", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      h = await f.login(fan);
+    const orphan = await uploadFile(f, h, "avatar"),
+      held = await uploadFile(f, h, "avatar");
+    const old = new Date(Date.now() - 400 * 86400000).toISOString();
+    await f.db.transaction(async (q) => {
+      for (const file of [orphan, held]) {
+        const media = await get(q, "media", file.id);
+        await put(q, "media", file.id, { ...media, at: old }, fan.id);
+      }
+      await put(
+        q,
+        "messages",
+        "expired",
+        {
+          id: "expired",
+          sender: fan.id,
+          conversationId: "conversation",
+          at: old,
+        },
+        "conversation",
+      );
+      await put(
+        q,
+        "messages",
+        "evidence",
+        { id: "evidence", sender: fan.id, mediaId: held.id, at: old },
+        "conversation",
+      );
+      await put(q, "reports", "report", {
+        id: "report",
+        target: "evidence",
+        status: "未対応",
+        evidence: { mediaId: held.id },
+      });
+      await put(q, "retention", "policy", {
+        enabled: true,
+        dmDays: 30,
+        storyDays: 7,
+        orphanDays: 7,
+        reportHoldDays: 365,
+      });
+    });
+    const preview = await retentionPreview(f.db);
+    assert.deepEqual(preview.entities, [
+      { resource: "messages", id: "expired" },
+    ]);
+    assert.ok(preview.files.some((f) => f.id === orphan.id));
+    assert.ok(!preview.files.some((f) => f.id === held.id));
+    await runRetention(f.db, f.config, "test", "保存方針の検証", true);
+    assert.equal(await get(f.db, "messages", "expired"), undefined);
+    assert.ok(await get(f.db, "messages", "evidence"));
+    await assert.rejects(readFile(join(f.config.files, orphan.id)), {
+      code: "ENOENT",
+    });
+    assert.ok((await readFile(join(f.config.files, held.id))).length);
+  } finally {
+    await f.close();
+  }
+});
+
+test("calendar timezones reject nonexistent DST times and scheduled publication respects UTC", async () => {
+  assert.equal(
+    wallTimeToISO("2026-10-20", "20:00", "Asia/Tokyo"),
+    "2026-10-20T11:00:00.000Z",
+  );
+  assert.equal(
+    wallTimeToISO("2026-07-01", "20:00", "America/New_York"),
+    "2026-07-02T00:00:00.000Z",
+  );
+  assert.throws(() => wallTimeToISO("2026-03-08", "02:30", "America/New_York"));
+  const f = await fixture();
+  try {
+    const h = await f.login(await f.user("super"), "admin", true),
+      fan = await f.login(await f.user());
+    const schedule = {
+      id: id(),
+      title: "世界配信",
+      date: "2026-07-01",
+      time: "20:00",
+      timezone: "America/New_York",
+      host: "まんぞう",
+      status: "予約",
+      publishAt: new Date(Date.now() - 1000).toISOString(),
+      image: "/assets/thumb_1.jpg",
+      url: "https://youtube.com/",
+      description: "世界の時刻",
+      plan: "Free",
+    };
+    const create = await f.app.inject({
+      method: "POST",
+      url: "/api/commands",
+      headers: h,
+      payload: {
+        changes: [{ resource: "schedules", id: schedule.id, after: schedule }],
+        action: "配信予定作成",
+        reason: "時刻の検証",
+      },
+    });
+    assert.equal(create.statusCode, 200, create.body);
+    const state = await f.app.inject({ url: "/api/state", headers: fan });
+    assert.equal(
+      state.json().state.schedules[0].startsAt,
+      "2026-07-02T00:00:00.000Z",
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("scheduled odds activate once and concurrent campaigns retain their fixed probability version", async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login(await f.user("super"), "admin", true),
+      fan = await f.login(await f.user());
+    const prize = {
+      id: id(),
+      title: "初版",
+      rarity: "N",
+      weight: 100,
+      image: "/assets/thumb_1.jpg",
+    };
+    const create = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/gacha/versions",
+      headers: admin,
+      payload: {
+        items: [prize],
+        effectiveAt: new Date(Date.now() - 1000).toISOString(),
+        reason: "初版を正式に公開",
+      },
+    });
+    assert.equal(create.statusCode, 200, create.body);
+    const version = create.json().id;
+    const campaign = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/gacha/campaigns",
+      headers: admin,
+      payload: {
+        campaign: {
+          title: "記念祭",
+          status: "公開",
+          start: "2026-01-01",
+          end: "2099-12-31",
+          oddsVersion: version,
+          ticketCost: 1,
+          maxBatch: 1,
+          maxPerUser: 3,
+          dailyTickets: 2,
+        },
+        reason: "期間限定の記念祭",
+      },
+    });
+    assert.equal(campaign.statusCode, 200, campaign.body);
+    const newer = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/gacha/versions",
+      headers: admin,
+      payload: {
+        items: [{ ...prize, id: id(), title: "新版" }],
+        effectiveAt: new Date(Date.now() + 60000).toISOString(),
+        reason: "次回の景品を予約",
+      },
+    });
+    await f.db.transaction(async (q) => {
+      const v = await get(q, "oddsSchedules", newer.json().id);
+      await put(q, "oddsSchedules", v.id, {
+        ...v,
+        effectiveAt: new Date(Date.now() - 1000).toISOString(),
+      });
+      await activateDueOdds(q);
+    });
+    const state = await f.app.inject({
+      url: `/api/state?campaign=${campaign.json().id}`,
+      headers: fan,
+    });
+    assert.equal(state.json().state.probabilities[0].title, "初版");
+    const draw = await f.app.inject({
+      method: "POST",
+      url: "/api/gacha/draw",
+      headers: fan,
+      payload: { count: 1, campaignId: campaign.json().id },
+    });
+    assert.equal(draw.statusCode, 200, draw.body);
+    assert.equal(draw.json().results[0].title, "初版");
+    assert.equal(draw.json().results[0].version, version);
+  } finally {
+    await f.close();
+  }
+});
+
+test("branded email escapes content, keeps logo proportions and never embeds an external logo URL", () => {
+  const html = brandedEmail(
+    { name: "マン組", emailLogo: "/api/media/a1-b2", accent: "#ffd45c" },
+    "確認<script>",
+    "こちら\nhttps://example.test/verify?token=abc&x=1",
+    "https://app.example.test",
+  );
+  assert.ok(html.includes("height:auto"));
+  assert.ok(html.includes("&lt;script&gt;"));
+  assert.ok(html.includes("token=abc&amp;x=1"));
+  assert.ok(!html.includes("<script>"));
+  assert.ok(
+    !brandedEmail(
+      { emailLogo: "https://outside.test/logo.png" },
+      "確認",
+      "本文",
+      "https://app.example.test",
+    ).includes("outside.test"),
+  );
+});
+
+test("encrypted backup restores database and files into an empty target and rejects tampering without partial data", async () => {
+  const f = await fixture(),
+    target = new Database({ database: "", sqlite: ":memory:" }),
+    rejected = new Database({ database: "", sqlite: ":memory:" });
+  try {
+    const fan = await f.user(),
+      headers = await f.login(fan),
+      picture = await uploadFile(f, headers, "avatar");
+    await f.db.transaction(async (q) => {
+      const settings = await get(q, "settings", "global");
+      await put(q, "settings", "global", { ...settings, maintenance: true });
+    });
+    const key = randomBytes(32).toString("base64"),
+      path = join(f.config.files, "verification.mgbak");
+    const saved = await createBackup(f.db, f.config, key, path);
+    assert.equal(saved.files, 1);
+    assert.ok(saved.records > 0);
+    const encrypted = await readFile(path);
+    assert.ok(!encrypted.includes(Buffer.from(fan.email)));
+    await target.initialize();
+    await rejected.initialize();
+    const restored = { files: join(f.config.files, "restored") },
+      bad = { files: join(f.config.files, "rejected") };
+    const result = await restoreBackup(target, restored, key, path);
+    assert.equal(result.files, 1);
+    assert.equal(
+      (await target.all("SELECT email FROM users WHERE id = ?", [fan.id]))[0]
+        .email,
+      fan.email,
+    );
+    assert.deepEqual(
+      await readFile(join(restored.files, picture.id)),
+      await readFile(join(f.config.files, picture.id)),
+    );
+    await assert.rejects(
+      restoreBackup(target, restored, key, path),
+      /空の新しい/,
+    );
+    encrypted[encrypted.length - 1] ^= 1;
+    const tampered = join(f.config.files, "tampered.mgbak");
+    await writeFile(tampered, encrypted);
+    await assert.rejects(restoreBackup(rejected, bad, key, tampered));
+    assert.equal(
+      (await rejected.all("SELECT COUNT(*) AS count FROM users"))[0].count,
+      0,
+    );
+    await assert.rejects(readFile(join(bad.files, picture.id)), {
+      code: "ENOENT",
+    });
+  } finally {
+    await target.close();
+    await rejected.close();
+    await f.close();
+  }
+});
+
+test("a slow payment provider does not hold the database lock or lose the pending spending reservation", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      headers = await f.login(fan);
+    await f.db.transaction(async (q) => {
+      const settings = await get(q, "settings", "global");
+      await put(q, "settings", "global", { ...settings, billingEnabled: true });
+      const plan = await get(q, "plans", "free");
+      await put(q, "plans", "free", {
+        ...plan,
+        features: [...plan.features, "投げ銭"],
+      });
+    });
+    let started!: () => void, release!: () => void;
+    const pending = new Promise<void>((r) => (release = r)),
+      entered = new Promise<void>((r) => (started = r));
+    const original = f.external.stripe.checkout.sessions.create;
+    f.external.stripe.checkout.sessions.create = (async (...args: any[]) => {
+      started();
+      await pending;
+      return original.apply(f.external.stripe.checkout.sessions, args as any);
+    }) as any;
+    const checkout = f.app.inject({
+      method: "POST",
+      url: "/api/billing/checkout",
+      headers,
+      payload: {
+        kind: "tip",
+        amount: 1000,
+        recipient: official.id,
+        message: "応援",
+      },
+    });
+    const running = checkout.then((r) => r);
+    await entered;
+    const deadline = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Database lock held during provider I/O")),
+        3000,
+      ).unref(),
+    );
+    try {
+      const state = await Promise.race([
+        f.app.inject({ url: "/api/state", headers }),
+        deadline,
+      ]);
+      assert.equal(state.statusCode, 200);
+      assert.equal(
+        (await list(f.db, "tips", fan.id))[0].paymentStatus,
+        "pending",
+      );
+    } finally {
+      release();
+    }
+    assert.equal((await running).statusCode, 200);
+  } finally {
+    await f.close();
+  }
+});
+test("signed charge refunds update fee-aware reports and revenue access remains role restricted", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official"),
+      admin = await f.login(await f.user("super"), "admin", true);
+    const tipId = id();
+    await f.db.transaction((q) =>
+      put(
+        q,
+        "tips",
+        tipId,
+        {
+          id: tipId,
+          userId: fan.id,
+          recipient: official.id,
+          at: now(),
+          amount: 5000,
+          paymentIntent: "pi_report",
+          paymentStatus: "paid",
+          status: "完了",
+        },
+        fan.id,
+      ),
+    );
+    const payload = JSON.stringify({
+      id: "evt_report_refund",
+      type: "charge.refunded",
+      data: {
+        object: {
+          id: "ch_report",
+          payment_intent: "pi_report",
+          currency: "jpy",
+          amount: 5000,
+          amount_refunded: 1000,
+          refunded: false,
+          balance_transaction: { id: "txn_report", fee: 180 },
+        },
+      },
+    });
+    const signature = f.external.stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret: f.config.stripeWebhook,
+    });
+    const webhook = await f.app.inject({
+      method: "POST",
+      url: "/api/webhooks/stripe",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": signature,
+      },
+      payload,
+    });
+    assert.equal(webhook.statusCode, 200, webhook.body);
+    const report = await f.app.inject({
+      url: "/api/admin/revenue",
+      headers: admin,
+    });
+    assert.deepEqual(report.json().total, {
+      count: 1,
+      gross: 5000,
+      refunded: 1000,
+      fees: 180,
+      feePending: 0,
+      net: 3820,
+    });
+    assert.equal((await get(f.db, "tips", tipId))?.status, "一部返金");
+    const memberHeaders = await f.login(fan);
+    assert.equal(
+      (
+        await f.app.inject({
+          url: "/api/admin/revenue",
+          headers: memberHeaders,
+        })
+      ).statusCode,
+      401,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("authentication email templates are validated and applied to the real queued mail", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      admin = await f.login(await f.user("super"), "admin", true);
+    const saved = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/email-templates",
+      headers: admin,
+      payload: {
+        template: {
+          purpose: "reset",
+          subject: "{{app}}の再設定",
+          text: "{{name}}さん\n{{url}}",
+        },
+        reason: "ブランド文面の適用",
+      },
+    });
+    assert.equal(saved.statusCode, 200, saved.body);
+    const invalid = await f.app.inject({
+      method: "POST",
+      url: "/api/admin/email-templates",
+      headers: admin,
+      payload: {
+        template: { purpose: "reset", subject: "確認", text: "リンクがない" },
+        reason: "入力検証の確認",
+      },
+    });
+    assert.equal(invalid.statusCode, 400);
+    const requested = await f.app.inject({
+      method: "POST",
+      url: "/api/auth/password/request",
+      headers: { origin: f.config.origin, "x-mangumi-request": "1" },
+      payload: { email: fan.email },
+    });
+    assert.equal(requested.statusCode, 200, requested.body);
+    await processJobs(f.db, f.external);
+    assert.equal(f.sent[0].subject, "まんぞうラブの再設定");
+    assert.ok(f.sent[0].text.includes("/u/U013?token="));
+    assert.ok(
+      f.sent[0].html.includes("height:auto") ||
+        f.sent[0].html.includes("まんぞうラブ"),
+    );
+    const spec = await f.app.inject({ url: "/api/openapi.json" });
+    assert.ok(
+      spec.json().paths["/api/billing/checkout"].post.requestBody.content[
+        "application/json"
+      ].schema.oneOf,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("hiding a paid plan from new applicants preserves its existing member rights and quotas", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      official = await f.user("official");
+    await f.db.transaction(async (q) => {
+      await put(q, "plans", "gold", {
+        id: "gold",
+        name: "Gold",
+        price: 1000,
+        published: false,
+        features: ["公式DM"],
+        policies: { "dm.send": { allowed: true, level: "send", week: 1 } },
+      });
+      const user = (
+        await q.all("SELECT profile FROM users WHERE id = ?", [fan.id])
+      )[0];
+      await q.run("UPDATE users SET profile = ? WHERE id = ?", [
+        JSON.stringify({ ...JSON.parse(user.profile), plan: "Gold" }),
+        fan.id,
+      ]);
+    });
+    const headers = await f.login(fan),
+      state = await f.app.inject({ url: "/api/state", headers });
+    assert.equal(state.json().state.entitlements["dm.send"], true);
+    assert.ok(state.json().state.plans.some((p: any) => p.name === "Gold"));
+    const conversation = await f.app.inject({
+      method: "POST",
+      url: "/api/conversations",
+      headers,
+      payload: { peer: official.id },
+    });
+    assert.equal(conversation.statusCode, 200, conversation.body);
+    const url = `/api/conversations/${conversation.json().id}/messages`;
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url,
+          headers,
+          payload: { text: "既存会員の権限" },
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url,
+          headers: { ...headers, "idempotency-key": id() },
+          payload: { text: "回数上限は維持" },
+        })
+      ).statusCode,
+      429,
     );
   } finally {
     await f.close();

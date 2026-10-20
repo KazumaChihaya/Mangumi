@@ -176,7 +176,9 @@ export default function ScreenPage({ id }: { id: string }) {
     if (feature && state.entitlements?.[feature] === false)
       return (
         <Shell screen={screen}>
-          <Panel title={`${features[feature]}の利用にはプランが必要です`}>
+          <Panel
+            title={`${state.featureNames?.[feature] ?? features[feature]}の利用にはプランが必要です`}
+          >
             <p>現在のプランでは、この機能を利用できません。</p>
             <Button id="U089">プランを確認する</Button>
           </Panel>
@@ -231,7 +233,7 @@ export default function ScreenPage({ id }: { id: string }) {
         (number >= 32 && number <= 39) ||
         (number >= 45 && number <= 66) ||
         number === 73 ||
-        (number >= 82 && number <= 93))
+        (number >= 82 && number <= 95))
     )
       return (
         <Shell screen={screen}>

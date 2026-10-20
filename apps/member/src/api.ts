@@ -7,6 +7,7 @@ export const currentArea = () =>
     ? "admin"
     : "member";
 const csrf: Record<string, string> = {};
+const unsettled = new Map<string, string>();
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -23,29 +24,48 @@ export async function api<T = any>(
   area = currentArea(),
   key?: string,
 ): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, {
-    method,
-    credentials: "include",
-    cache: "no-store",
-    headers: {
-      ...(body instanceof FormData
-        ? {}
-        : body === undefined
+  const fingerprint = key
+    ? `${area}:${method}:${path}:${JSON.stringify(body)}`
+    : "";
+  const requestKey = fingerprint ? (unsettled.get(fingerprint) ?? key) : key;
+  if (fingerprint && requestKey) unsettled.set(fingerprint, requestKey);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      method,
+      credentials: "include",
+      cache: "no-store",
+      headers: {
+        ...(body instanceof FormData
           ? {}
-          : { "Content-Type": "application/json" }),
-      "X-Mangumi-Request": "1",
-      "X-Mangumi-Area": area,
-      "X-CSRF-Token": csrf[area] ?? "",
-      ...(key ? { "Idempotency-Key": key } : {}),
-    },
-    body:
-      body === undefined
-        ? undefined
-        : body instanceof FormData
-          ? body
-          : JSON.stringify(body),
-  });
+          : body === undefined
+            ? {}
+            : { "Content-Type": "application/json" }),
+        "X-Mangumi-Request": "1",
+        "X-Mangumi-Area": area,
+        "X-CSRF-Token": csrf[area] ?? "",
+        ...(requestKey ? { "Idempotency-Key": requestKey } : {}),
+      },
+      body:
+        body === undefined
+          ? undefined
+          : body instanceof FormData
+            ? body
+            : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(
+      "通信できませんでした。同じ操作を再試行できます",
+      0,
+      "network",
+    );
+  }
   const payload = await response.json().catch(() => ({}));
+  if (
+    fingerprint &&
+    (response.ok || (response.status < 500 && payload.code !== "processing"))
+  )
+    unsettled.delete(fingerprint);
   if (!response.ok)
     throw new ApiError(
       payload.message ?? "通信できませんでした",
@@ -82,6 +102,7 @@ export type Change = {
   after?: unknown;
 };
 const localFields = new Set([
+  "featureNames",
   "audit",
   "probabilityVersion",
   "probabilityVersions",

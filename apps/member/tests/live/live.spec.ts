@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { totp } from "../../../api/src/security";
 import screens from "../../src/screens.json";
@@ -20,14 +21,33 @@ async function login(page: Page, email: string, admin = false) {
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
   if (admin) {
     await expect(page.getByTestId("A002")).toBeVisible();
-    const setup = page.getByRole("button", { name: "認証アプリへ登録する" });
-    await expect(setup).toBeVisible();
-    await setup.click();
-    const secret = await page.locator("code").innerText();
+    const session = await page.request.get("/api/admin/auth/session");
+    const enrollment = (await session.json()).enrollmentRequired;
+    const savedPath = resolve("../../.local/live-tests/mfa-admin.json");
+    let secret: string;
+    if (enrollment) {
+      const setup = page.getByRole("button", { name: "認証アプリへ登録する" });
+      await expect(setup).toBeVisible();
+      await setup.click();
+      secret = await page.locator("code").innerText();
+    } else {
+      const saved = JSON.parse(await readFile(savedPath, "utf8"));
+      secret = saved.secret;
+      if (saved.step === Math.floor(Date.now() / 30000))
+        await expect
+          .poll(() => Math.floor(Date.now() / 30000), { timeout: 31000 })
+          .not.toBe(saved.step);
+    }
     await page.getByLabel("認証コード・復旧コード").fill(totp(secret));
     await page.getByRole("button", { name: "認証する", exact: true }).click();
-    await page.getByRole("link", { name: "保存したので管理画面へ" }).click();
+    if (enrollment)
+      await page.getByRole("link", { name: "保存したので管理画面へ" }).click();
     await expect(page.getByTestId("A008")).toBeVisible();
+    await writeFile(
+      savedPath,
+      JSON.stringify({ secret, step: Math.floor(Date.now() / 30000) }),
+      { mode: 0o600 },
+    );
   } else {
     await expect(
       page.getByTestId("U022").or(page.getByTestId("U016")),
@@ -284,5 +304,157 @@ test("administrator logs in with real MFA and publishes a schedule visible to an
     await page.goto(screenPath(screen.id));
     await expect(page.getByTestId(screen.id)).toBeVisible();
     expect(errors, screen.id).toEqual([]);
+  }
+});
+
+test("administrator saves detailed plan limits, notification templates and retention policy on mobile", async ({
+  page,
+}) => {
+  await login(page, "admin@example.test", true);
+  await page.setViewportSize({ width: 320, height: 850 });
+  await page.goto("/admin/A018");
+  await page.getByRole("button", { name: "編集", exact: true }).first().click();
+  await page.getByText("公式DMの権限・上限", { exact: true }).click();
+  await page.locator('input[name="dm.send.week"]').fill("5");
+  await page.locator('input[name="dm.send.month"]').fill("20");
+  const planForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "プランを保存", exact: true }),
+  });
+  await planForm
+    .getByLabel("変更理由", { exact: true })
+    .fill("週次と月次の上限を設定する");
+  await planForm
+    .getByRole("button", { name: "プランを保存", exact: true })
+    .click();
+  await expect(
+    page.getByText("プランを保存しました", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/admin/A035");
+  const template = page
+    .locator("form")
+    .filter({ has: page.getByLabel("テンプレート名", { exact: true }) });
+  await template
+    .getByLabel("テンプレート名", { exact: true })
+    .fill("ブラウザで作成した配信案内");
+  await template.getByLabel("タイトル", { exact: true }).fill("マン組の配信");
+  await template.getByLabel("本文", { exact: true }).fill("配信をお楽しみに");
+  await template
+    .getByLabel("変更理由", { exact: true })
+    .fill("定例配信の通知に利用する");
+  await template
+    .getByRole("button", { name: "テンプレートを保存", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", {
+      name: "ブラウザで作成した配信案内を編集・利用",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("/admin/A085");
+  await page.getByLabel("DM保存日数", { exact: true }).fill("60");
+  await page
+    .getByLabel("変更理由", { exact: true })
+    .fill("保存期間の設定を確認する");
+  await page
+    .getByRole("button", { name: "保存方針を適用", exact: true })
+    .click();
+  await expect(page.getByLabel("DM保存日数", { exact: true })).toHaveValue(
+    "60",
+  );
+  const policy = await page.request.get("/api/admin/retention");
+  expect((await policy.json()).policy.dmDays).toBe(60);
+  const auth = await page.request.get("/api/admin/auth/session"),
+    csrf = (await auth.json()).csrf;
+  const entry = {
+    id: crypto.randomUUID(),
+    title: "編集を検証するストーリー",
+    image: "/assets/thumb_1.jpg",
+    status: "公開",
+    plan: "Free",
+    highlight: false,
+    publishAt: new Date(Date.now() - 60000).toISOString(),
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  };
+  const create = await page.request.post("/api/commands", {
+    headers: {
+      Origin: "http://127.0.0.1:4193",
+      "X-Mangumi-Request": "1",
+      "X-Mangumi-Area": "admin",
+      "X-CSRF-Token": csrf,
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+    data: {
+      changes: [{ resource: "stories", id: entry.id, after: entry }],
+      action: "投稿の編集検証",
+      reason: "ブラウザで編集して保存する",
+    },
+  });
+  expect(create.ok()).toBe(true);
+  await page.goto("/admin/A040");
+  const storyForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "公開状態を変更", exact: true }),
+  });
+  await storyForm
+    .getByLabel("本文", { exact: true })
+    .fill("ブラウザで更新したストーリー");
+  await storyForm
+    .getByLabel("変更理由", { exact: true })
+    .fill("投稿内容の訂正を確認する");
+  await storyForm
+    .getByRole("button", { name: "公開状態を変更", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: /ブラウザで更新したストーリー/,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", {
+      name: "ブラウザで更新したストーリー",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("/admin/A089");
+  await page
+    .getByLabel("通知先メール（最大5件、カンマ区切り）", { exact: true })
+    .fill("ops@example.test");
+  await page.getByLabel("異常通知", { exact: true }).selectOption("有効");
+  await page
+    .getByLabel("アラート設定の変更理由", { exact: true })
+    .fill("異常時の通知先を設定する");
+  const alertSaved = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/admin/monitoring") &&
+      r.request().method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "アラート設定を保存", exact: true })
+    .click();
+  expect((await alertSaved).ok()).toBe(true);
+  const alertConfig = await page.request.get("/api/admin/monitoring");
+  expect((await alertConfig.json()).policy.recipients).toEqual([
+    "ops@example.test",
+  ]);
+  for (const id of [
+    "A018",
+    "A035",
+    "A060",
+    "A075",
+    "A082",
+    "A085",
+    "A089",
+    "A094",
+  ]) {
+    await page.goto(`/admin/${id}`);
+    await expect(page.getByTestId(id)).toBeVisible();
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth + 1,
+          ),
+        { message: `${id} must fit a mobile viewport` },
+      )
+      .toBe(true);
   }
 });

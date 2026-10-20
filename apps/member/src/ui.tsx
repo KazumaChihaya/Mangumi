@@ -565,28 +565,126 @@ export function Table({
   rows: React.ReactNode[][];
   empty?: string;
 }) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState(-1);
+  const [descending, setDescending] = useState(false);
+  const [page, setPage] = useState(0);
+  const cellText = (cell: React.ReactNode): string =>
+    typeof cell === "string" || typeof cell === "number"
+      ? String(cell)
+      : Array.isArray(cell)
+        ? cell.map(cellText).join(" ")
+        : React.isValidElement<{ children?: React.ReactNode }>(cell)
+          ? cellText(cell.props.children)
+          : "";
+  const filtered = rows.filter((row) =>
+    row.some((cell) =>
+      cellText(cell).toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    ),
+  );
+  if (sort >= 0)
+    filtered.sort(
+      (a, b) =>
+        cellText(a[sort]).localeCompare(cellText(b[sort]), "ja", {
+          numeric: true,
+        }) * (descending ? -1 : 1),
+    );
+  const current = Math.min(
+    page,
+    Math.max(0, Math.ceil(filtered.length / 25) - 1),
+  );
   return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index}>
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex}>{cell}</td>
+    <>
+      <div className="toolbar">
+        <label className="field">
+          <span>一覧を検索・絞り込み</span>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+        <Button
+          tone="ghost"
+          onClick={() =>
+            downloadCSV(
+              "mangumi-export.csv",
+              columns,
+              filtered.map((row) => row.map(cellText)),
+            )
+          }
+        >
+          CSV出力
+        </Button>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              {columns.map((column, index) => (
+                <th
+                  key={column}
+                  aria-sort={
+                    sort !== index
+                      ? "none"
+                      : descending
+                        ? "descending"
+                        : "ascending"
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSort(index);
+                      setDescending(sort === index ? !descending : false);
+                    }}
+                  >
+                    {column}
+                    {sort === index ? (descending ? " ▼" : " ▲") : " ↕"}
+                  </button>
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {!rows.length && <p className="table-empty">{empty}</p>}
-    </div>
+          </thead>
+          <tbody>
+            {filtered
+              .slice(current * 25, current * 25 + 25)
+              .map((row, index) => (
+                <tr key={index}>
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+          </tbody>
+        </table>
+        {!filtered.length && <p className="table-empty">{empty}</p>}
+      </div>
+      {filtered.length > 25 && (
+        <div className="button-row">
+          <Button
+            tone="ghost"
+            disabled={current === 0}
+            onClick={() => setPage(current - 1)}
+          >
+            前へ
+          </Button>
+          <span>
+            {current + 1} / {Math.ceil(filtered.length / 25)}（{filtered.length}
+            件）
+          </span>
+          <Button
+            tone="ghost"
+            disabled={(current + 1) * 25 >= filtered.length}
+            onClick={() => setPage(current + 1)}
+          >
+            次へ
+          </Button>
+        </div>
+      )}
+    </>
   );
 }
 export function SoundControls() {

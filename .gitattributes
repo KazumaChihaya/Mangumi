@@ -1,0 +1,2 @@
+# Dependency patch context and upstream whitespace are part of the patch hash.
+patches/*.patch -text -whitespace

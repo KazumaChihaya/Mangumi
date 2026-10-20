@@ -103,6 +103,16 @@ export function LiveStories({ screen }: { screen: Screen }) {
           />
         )}
         <p>{story.title}</p>
+        {(story as any).link && (
+          <a
+            className="button primary"
+            href={(story as any).link}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            リンクを開く
+          </a>
+        )}
         <Notice>
           {story.highlight ? "ハイライトとして公開中" : "期間限定のストーリー"}
         </Notice>

@@ -9,6 +9,43 @@ export function LivePwa({ admin = false }: { admin?: boolean }) {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
   const [install, setInstall] = useState<any>(null);
   const brand = useResource("/brand", 0);
+  const guides = useResource<any[]>("/install-guides", 0);
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const ios =
+    /iPhone|iPad|iPod/.test(ua) ||
+    (typeof navigator !== "undefined" &&
+      navigator.platform === "MacIntel" &&
+      navigator.maxTouchPoints > 1);
+  const os = ios
+    ? "iOS"
+    : /Android/.test(ua)
+      ? "Android"
+      : /Windows/.test(ua)
+        ? "Windows"
+        : "macOS";
+  const browser = /Edg\//.test(ua)
+    ? "Edge"
+    : /Firefox|FxiOS/.test(ua)
+      ? "Firefox"
+      : /Chrome|CriOS/.test(ua)
+        ? "Chrome"
+        : "Safari";
+  const major = Number(
+    (ios
+      ? /(?:OS|Version) (\d+)/.exec(ua)
+      : os === "Android"
+        ? /Android (\d+)/.exec(ua)
+        : os === "Windows"
+          ? /Windows NT (\d+)/.exec(ua)
+          : /Mac OS X (\d+)/.exec(ua))?.[1] ?? 0,
+  );
+  const matching = guides.data?.filter(
+    (g) =>
+      (g.os === "any" || g.os === os) &&
+      (g.browser === "any" || g.browser === browser) &&
+      major >= g.minVersion &&
+      major <= g.maxVersion,
+  );
   useEffect(() => {
     const standalone =
       matchMedia("(display-mode: standalone)").matches ||
@@ -91,6 +128,24 @@ export function LivePwa({ admin = false }: { admin?: boolean }) {
       )}
       {guide && (
         <Panel title={`${device}のホーム画面に追加`}>
+          {matching?.map((g) => (
+            <section key={g.id}>
+              <h3>{g.title}</h3>
+              <img
+                src={g.image}
+                alt={g.title}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
+              />
+              <ol>
+                {g.body
+                  .split("\n")
+                  .filter(Boolean)
+                  .map((step: string, i: number) => (
+                    <li key={i}>{step}</li>
+                  ))}
+              </ol>
+            </section>
+          ))}
           {brand.data?.installGuide && (
             <img
               src={brand.data.installGuide}
