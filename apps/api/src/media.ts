@@ -16,6 +16,7 @@ import { fail, id, now, once } from "./security.ts";
 import { planLimits, entitled, contentVisible } from "./domain.ts";
 import { featurePolicy } from "./limits.ts";
 import { availableCampaigns, campaignOdds } from "./campaigns.ts";
+import { contentAccess } from "./content-access.ts";
 
 async function probeDuration(info: any, path: string): Promise<number> {
   const duration = Number(info.format?.duration);
@@ -481,7 +482,20 @@ export function registerMedia(
           if (present) {
             try {
               await entitled(db, actor.user, feature);
-              allowed = true;
+              if (feature === "gacha.draw") allowed = true;
+              else
+                for (const item of feature === "story.view"
+                  ? stories
+                  : schedules) {
+                  const access = await contentAccess(
+                    db,
+                    actor.user,
+                    feature,
+                    item,
+                  );
+                  if (access.allowed && (!access.limited || access.viewed))
+                    allowed = true;
+                }
             } catch {}
           }
         if (!allowed) fail(403, "この画像・動画を閲覧できません");

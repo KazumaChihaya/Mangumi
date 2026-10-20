@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { publicPath } from "../web-path";
 import { useLocalSearchParams } from "expo-router";
 import { useStore } from "../store";
-import { safeLink } from "../model";
+import { safeLink, type Schedule } from "../model";
 import { localSchedule, scheduleStart } from "../dates";
 import type { Screen } from "../registry";
 import { api } from "../api";
@@ -33,7 +33,32 @@ export function CalendarPage({
   const [month, setMonth] = useState(live ? new Date().getMonth() : 9);
   const [year, setYear] = useState(live ? new Date().getFullYear() : 2026);
   const [day, setDay] = useState(live ? new Date().getDate() : 16);
-  const selected = schedules.find((s) => s.id === item) ?? schedules[0];
+  const base = schedules.find((s) => s.id === item) ?? schedules[0];
+  const [detailItem, setDetailItem] = useState<Schedule>(),
+    [detailError, setDetailError] = useState(""),
+    [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setDetailItem(undefined);
+    setDetailError("");
+    if (live && !admin && base && ["U029", "U033"].includes(screen.id))
+      void api<Schedule>(`/schedules/${base.id}/view`, {})
+        .then((value) => {
+          if (!cancelled) setDetailItem(value);
+        })
+        .catch((e) => {
+          if (!cancelled) setDetailError(e.message);
+        });
+    return () => {
+      cancelled = true;
+    };
+  }, [base?.id, screen.id, live, admin, attempt]);
+  const selected =
+    detailItem?.id === base?.id && detailItem
+      ? localSchedule(detailItem)
+      : base;
+  const [selection, setSelection] = useState<number[]>();
+  useEffect(() => setSelection(undefined), [selected?.id]);
   const reminder = useResource(
     live && screen.id === "U032" && selected
       ? `/schedules/${encodeURIComponent(selected.id)}/reminders`
@@ -46,6 +71,7 @@ export function CalendarPage({
     "10分前": 10,
   };
   const timings: number[] =
+    selection ??
     reminder.data?.minutes ??
     state.reminders.map((t) => defaults[t]).filter(Number.isFinite);
   if (["U029", "U032", "U033"].includes(screen.id) && !selected)
@@ -78,20 +104,11 @@ export function CalendarPage({
                 checked={timings.includes(minutes)}
                 onChange={async (checked) => {
                   if (live) {
-                    try {
-                      await api(
-                        `/schedules/${selected.id}/reminders`,
-                        {
-                          minutes: checked
-                            ? [...timings, minutes]
-                            : timings.filter((n) => n !== minutes),
-                        },
-                        "PUT",
-                      );
-                      await reminder.reload();
-                    } catch (e) {
-                      notify((e as Error).message);
-                    }
+                    setSelection(
+                      checked
+                        ? [...timings, minutes]
+                        : timings.filter((n) => n !== minutes),
+                    );
                     return;
                   }
                   const time = Object.keys(defaults).find(
@@ -107,7 +124,22 @@ export function CalendarPage({
             ))}
           <Button
             className="full"
-            onClick={() => notify("リマインダーを保存しました")}
+            onClick={async () => {
+              try {
+                if (live) {
+                  await api(
+                    `/schedules/${selected.id}/reminders`,
+                    { minutes: timings },
+                    "PUT",
+                  );
+                  await reminder.reload();
+                  setSelection(undefined);
+                }
+                notify("リマインダーを保存しました");
+              } catch (e) {
+                notify((e as Error).message);
+              }
+            }}
           >
             設定を保存
           </Button>
@@ -116,6 +148,20 @@ export function CalendarPage({
           配信詳細へ戻る
         </Button>
       </>
+    );
+  if (
+    live &&
+    !admin &&
+    ["U029", "U033"].includes(screen.id) &&
+    detailItem?.id !== base?.id
+  )
+    return (
+      <Panel>
+        <Notice>{detailError || "配信予定を確認しています…"}</Notice>
+        {detailError && (
+          <Button onClick={() => setAttempt((n) => n + 1)}>再試行</Button>
+        )}
+      </Panel>
     );
   if (["U029", "U033"].includes(screen.id))
     return (

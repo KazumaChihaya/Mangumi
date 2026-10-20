@@ -598,18 +598,37 @@ export function registerStores(
         r.platform === "android" &&
         r.tokenHash === digest(change.purchaseToken),
     );
-    const productId = change.subscriptionId ?? change.sku ?? known?.productId,
-      product = await get(
-        db,
-        "storeProducts",
-        productKey("android", productId),
+    let productId = change.subscriptionId ?? change.sku ?? known?.productId;
+    let resolved: StoreTransaction | undefined;
+    if (!productId) {
+      const kind =
+        message.subscriptionNotification || change.productType === 1
+          ? "subscription"
+          : "coins";
+      resolved = await external.verifyStore(
+        { platform: "android", productId: "", proof: change.purchaseToken },
+        kind,
       );
-    if (!product) fail(409, "商品の登録を待っています");
-    const transaction = await external.verifyStore(
-      { platform: "android", productId, proof: change.purchaseToken },
-      product.kind,
+      productId = resolved.productId;
+    }
+    const product = await get(
+      db,
+      "storeProducts",
+      productKey("android", productId),
     );
-    if (message.voidedPurchaseNotification) transaction.revoked = true;
+    if (!product) fail(409, "商品の登録を待っています");
+    const transaction =
+      resolved ??
+      (await external.verifyStore(
+        { platform: "android", productId, proof: change.purchaseToken },
+        product.kind,
+      ));
+    // A refund for an earlier renewal must not revoke the latest paid renewal.
+    if (
+      message.voidedPurchaseNotification &&
+      (product.kind !== "subscription" || change.orderId === transaction.id)
+    )
+      transaction.revoked = true;
     return db.transaction(async (q) => {
       if (
         (
@@ -629,6 +648,21 @@ export function registerStores(
             ])
           )[0];
       if (!user) fail(409, "購入者の登録を待っています");
+      if (
+        message.voidedPurchaseNotification &&
+        product.kind === "subscription" &&
+        change.orderId !== transaction.id
+      ) {
+        const prior = (await list(q, "storeReceipts", user.id)).find(
+          (r) => r.platform === "android" && r.idInStore === change.orderId,
+        );
+        if (prior)
+          await apply(q, user, product, {
+            ...prior,
+            id: prior.idInStore,
+            revoked: true,
+          });
+      }
       await apply(q, user, product, transaction);
       await q.run(
         "INSERT INTO webhook_events (id,provider,processed_at) VALUES (?,'google-play',?)",

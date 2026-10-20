@@ -29,7 +29,14 @@ export class NativeSession {
     private send: typeof fetch = fetch,
   ) {
     const url = new URL(origin);
-    if (url.origin !== origin || !["https:", "http:"].includes(url.protocol))
+    if (
+      url.origin !== origin ||
+      (url.protocol !== "https:" &&
+        !(
+          url.protocol === "http:" &&
+          ["localhost", "127.0.0.1", "10.0.2.2"].includes(url.hostname)
+        ))
+    )
       throw new Error("アプリのHTTPS接続先を設定してください");
   }
   get userId() {
@@ -97,18 +104,23 @@ export class NativeSession {
     this.tokens = tokens;
   }
   async link(code: string) {
-    this.linking = (async () => {
+    const previous = this.linking ?? this.refreshing;
+    const task = (async () => {
+      await previous?.catch(() => {});
       const result = await this.call("/api/native/exchange", {
         code,
         nonce: this.nonce,
       });
       await this.save(result);
     })().finally(() => {
-      this.linking = undefined;
+      if (this.linking === task) this.linking = undefined;
     });
-    return this.linking;
+    this.linking = task;
+    return task;
   }
   async refresh() {
+    if (this.refreshing) return this.refreshing;
+    if (this.linking) await this.linking;
     if (this.refreshing) return this.refreshing;
     this.refreshing = (async () => {
       const stored = await this.storage.get("mangumi.refresh");

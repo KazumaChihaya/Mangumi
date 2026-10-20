@@ -128,6 +128,7 @@ export interface Operations {
 "post_api_admin_features": { body: { "feature": { "key": "calendar.view" | "notification.receive" | "story.view" | "dm.send" | "dm.audio.send" | "voice.join" | "voice.speak" | "voice.create" | "gacha.draw" | "tip.send"; "name": string; "description": string }; "reason": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "get_api_admin_email_templates": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
 "post_api_admin_email_templates": { body: { "template": { "purpose": "verify" | "email" | "reset"; "subject": string; "text": string }; "reason": string }; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
+"post_api_schedules_id_view": { body: {  }; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
 "get_api_schedules_id_reminders": { body: undefined; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
 "put_api_schedules_id_reminders": { body: { "minutes": Array<number> }; params: { "id": string }; query: {  }; response: {  } & Record<string, unknown> };
 "get_api_tips_messages": { body: undefined; params: {  }; query: {  }; response: {  } & Record<string, unknown> };
@@ -772,6 +773,11 @@ const routes = {
   },
   "post_api_admin_email_templates": {
     "path": "/api/admin/email-templates",
+    "method": "POST",
+    "binary": false
+  },
+  "post_api_schedules_id_view": {
+    "path": "/api/schedules/{id}/view",
     "method": "POST",
     "binary": false
   },

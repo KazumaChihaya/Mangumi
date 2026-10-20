@@ -412,6 +412,7 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
                 {
                   maintenance: values.maintenance === "メンテナンス中",
                   maintenanceText: values.maintenanceText,
+                  reminders: values.reminders.split(/[,、\s]+/).filter(Boolean),
                   ngWords: values.ngWords,
                   duplicateNicknames: values.duplicateNicknames === "許可",
                   dmAllowedHosts: values.dmAllowedHosts
@@ -493,6 +494,13 @@ export function LiveAdmin({ screen }: { screen: Screen }) {
               type="number"
               value={state.settings.roomLimit}
               required
+            />
+            <Field
+              name="reminders"
+              label="既定の配信リマインダー（24時間前・1時間前・10分前をカンマ区切り）"
+              value={(
+                (state.settings as any).reminders ?? ["1時間前", "10分前"]
+              ).join(", ")}
             />
             <Field
               name="audioSeconds"

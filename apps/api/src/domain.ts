@@ -15,10 +15,11 @@ import {
 } from "./security.ts";
 import { permit, roleNames, type Identity, type User } from "./auth.ts";
 import { features } from "../../member/src/features.ts";
-import { policiesSchema, consume } from "./limits.ts";
+import { policiesSchema, consume, featurePolicy } from "./limits.ts";
 import { wallTimeToISO } from "../../member/src/dates.ts";
 import { activateDueOdds } from "./gacha-versions.ts";
 import { campaignOdds } from "./campaigns.ts";
+import { contentRule, claimContentView } from "./content-access.ts";
 
 const text = z.string().trim().min(1).max(200);
 const resourceId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
@@ -194,6 +195,10 @@ export const settingsSchema = z
     notifyDM: z.boolean(),
     notifyStory: z.boolean(),
     notifySchedule: z.boolean(),
+    reminders: z
+      .array(z.enum(["24時間前", "1時間前", "10分前"]))
+      .max(3)
+      .optional(),
     notifyVoice: z.boolean().optional(),
     notifyGacha: z.boolean().optional(),
     notifyGeneral: z.boolean().optional(),
@@ -508,7 +513,40 @@ export async function snapshot(
       }
     }
     state.settings = { ...state.settings, ...preferences?.settings };
-    state.reminders = preferences?.reminders ?? ["1時間前", "10分前"];
+    for (const [resource, feature] of [
+      ["schedules", "calendar.view"],
+      ["stories", "story.view"],
+    ] as const) {
+      const items = [];
+      const policy = await featurePolicy(q, actor.user, feature),
+        views = new Set(
+          (
+            await list(
+              q,
+              resource === "stories" ? "storyViews" : "calendarViews",
+              actor.user.id,
+            )
+          ).map((row) => row.storyId ?? row.scheduleId),
+        );
+      for (const item of state[resource]) {
+        const access = contentRule(policy, item, views.has(item.id));
+        if (!access.allowed) continue;
+        items.push(
+          access.limited && !access.viewed
+            ? {
+                ...item,
+                image: "/assets/icon.svg",
+                ...(resource === "schedules"
+                  ? { description: "", url: "" }
+                  : {}),
+              }
+            : item,
+        );
+      }
+      (state as any)[resource] = items;
+    }
+    state.reminders = preferences?.reminders ??
+      state.settings.reminders ?? ["1時間前", "10分前"];
     state.blocked = preferences?.blocked ?? false;
     state.conversationMuted = preferences?.conversationMuted ?? false;
   }
@@ -760,11 +798,7 @@ export async function mutate(
           !(after as any)?.viewed
         )
           fail(403, "閲覧できないストーリーです");
-        if (!(await get(q, "storyViews", `${actor.user.id}_${entityId}`)))
-          await consume(q, actor.user, "story.view", {
-            level: "view",
-            target: story.authorId ?? story.id,
-          });
+        await claimContentView(q, actor.user, "story.view", story);
         await put(
           q,
           "storyViews",

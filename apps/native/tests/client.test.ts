@@ -144,3 +144,32 @@ test("notification and deep-link destinations remain within the configured appli
   ])
     assert.equal(localDestination(value, origin), "/");
 });
+
+test("overlapping WebView handshakes cannot overwrite the latest native session with an older credential", async () => {
+  const seen: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const f = fixture(async (input, options) => {
+    if (String(input).endsWith("exchange")) {
+      const body = JSON.parse(String(options!.body));
+      seen.push(body.code);
+      if (body.code === "first") await gate;
+      return json(tokens(body.code));
+    }
+    assert.equal(
+      new Headers(options!.headers).get("Authorization"),
+      "Bearer access-second-test-only",
+    );
+    return json({ ok: true });
+  });
+  const first = f.session.link("first"),
+    second = f.session.link("second"),
+    request = f.session.request("/api/me/sessions");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(seen, ["first"]);
+  release();
+  await Promise.all([first, second, request]);
+  assert.deepEqual(seen, ["first", "second"]);
+});

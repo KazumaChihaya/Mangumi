@@ -121,8 +121,10 @@ export function storeServices(config: Config) {
       if (sandbox && config.appleEnvironment !== "Sandbox")
         fail(403, "テスト購入はテスト用サーバーで確認してください");
       if (kind === "subscription") {
-        const item = data.lineItems?.find(
-          (i: any) => i.productId === input.productId,
+        const item = data.lineItems?.find((i: any) =>
+          input.productId
+            ? i.productId === input.productId
+            : data.lineItems.length === 1,
         );
         const active = [
           "SUBSCRIPTION_STATE_ACTIVE",
@@ -147,8 +149,10 @@ export function storeServices(config: Config) {
           quantity: 1,
         };
       }
-      const item = data.productLineItem?.find(
-        (i: any) => i.productId === input.productId,
+      const item = data.productLineItem?.find((i: any) =>
+        input.productId
+          ? i.productId === input.productId
+          : data.productLineItem.length === 1,
       );
       if (
         !item ||

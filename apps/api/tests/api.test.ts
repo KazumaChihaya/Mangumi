@@ -32,6 +32,189 @@ import { createBackup, restoreBackup } from "../src/backup.ts";
 import { checkOperationalAlerts } from "../src/monitoring.ts";
 import { expireStoreMemberships } from "../src/stores.ts";
 
+test("content view quotas apply to actual content and media, preserve retries and enforce target restrictions", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user(),
+      headers = await f.login(fan),
+      admin = await f.login(await f.user("super"), "admin", true),
+      media = await uploadFile(f, admin, "image");
+    await f.db.transaction(async (q) => {
+      const plan = await get(q, "plans", "free");
+      await put(q, "plans", "free", {
+        ...plan,
+        policies: {
+          "calendar.view": {
+            allowed: true,
+            level: "view",
+            day: 1,
+            targets: ["schedule-one", "schedule-two"],
+          },
+          "story.view": { allowed: true, level: "view", day: 1 },
+        },
+      });
+      for (const key of ["schedule-one", "schedule-two", "outside-target"])
+        await put(q, "schedules", key, {
+          id: key,
+          title: key,
+          description: "protected-description",
+          url: "https://youtube.com/watch?v=test",
+          image: media.url,
+          date: "2099-01-01",
+          time: "20:00",
+          plan: "Free",
+          status: "公開",
+        });
+      await put(q, "stories", "quota-story", {
+        id: "quota-story",
+        title: "閲覧制限付き",
+        image: media.url,
+        highlight: true,
+        plan: "Free",
+        status: "公開",
+      });
+    });
+    const snapshot = (await f.app.inject({ url: "/api/state", headers })).json()
+      .state;
+    assert.equal(snapshot.schedules.length, 2);
+    assert.equal(snapshot.schedules[0].description, "");
+    assert.equal(snapshot.stories[0].image, "/assets/icon.svg");
+    assert.equal(
+      (await f.app.inject({ url: media.url, headers })).statusCode,
+      403,
+    );
+    for (let i = 0; i < 2; i++) {
+      const viewed = await f.app.inject({
+        method: "POST",
+        url: "/api/schedules/schedule-one/view",
+        headers,
+        payload: {},
+      });
+      assert.equal(viewed.statusCode, 200, viewed.body);
+      assert.equal(viewed.json().description, "protected-description");
+    }
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/schedules/schedule-two/view",
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+      429,
+    );
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/schedules/outside-target/view",
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+      403,
+    );
+    assert.equal(
+      (await f.app.inject({ url: media.url, headers })).statusCode,
+      200,
+    );
+    const acknowledge = await f.app.inject({
+      method: "POST",
+      url: "/api/commands",
+      headers,
+      payload: {
+        changes: [
+          { resource: "stories", id: "quota-story", after: { viewed: true } },
+        ],
+        action: "ストーリー閲覧",
+        reason: "閲覧回数を確認する",
+      },
+    });
+    assert.equal(acknowledge.statusCode, 200, acknowledge.body);
+    assert.equal(acknowledge.json().state.stories[0].image, media.url);
+  } finally {
+    await f.close();
+  }
+});
+
+test("Google refund notifications resolve an unseen product and an old renewal refund preserves the latest subscription", async () => {
+  const f = await fixture();
+  try {
+    const fan = await f.user();
+    await put(
+      f.db,
+      "storeAccounts",
+      digest(fan.id),
+      { userId: fan.id },
+      fan.id,
+    );
+    await put(f.db, "plans", "play-plan", {
+      id: "play-plan",
+      name: "Play Gold",
+      published: true,
+      price: 1000,
+      features: [],
+    });
+    const sku = "play.gold.monthly",
+      product = {
+        platform: "android",
+        productId: sku,
+        kind: "subscription",
+        planId: "play-plan",
+        amount: 1000,
+        currency: "JPY",
+        published: true,
+      };
+    await put(f.db, "storeProducts", digest(`android:${sku}`), product);
+    const expiresAt = new Date(Date.now() + 86400000).toISOString(),
+      proof = "synthetic-google-token-test-only";
+    f.config.googlePackage = "test.mangumi.app";
+    (f.external as any).googleNotification = async () => {};
+    (f.external as any).verifyStore = async (input: any) => ({
+      platform: "android",
+      id: "latest-order-2",
+      originalId: digest(proof),
+      productId: sku,
+      accountId: digest(fan.id),
+      purchasedAt: now(),
+      expiresAt,
+      revoked: false,
+      quantity: 1,
+    });
+    const event = {
+      packageName: f.config.googlePackage,
+      voidedPurchaseNotification: {
+        purchaseToken: proof,
+        productType: 1,
+        orderId: "earlier-order-1",
+      },
+    };
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/api/webhooks/google-play",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer synthetic-test-identity",
+      },
+      payload: JSON.stringify({
+        message: {
+          messageId: "voided-before-device-verification",
+          data: Buffer.from(JSON.stringify(event)).toString("base64"),
+        },
+      }),
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(
+      (await get(f.db, "storeSubscription", fan.id)).status,
+      "active",
+    );
+    assert.equal((await list(f.db, "storeReceipts", fan.id))[0].revoked, false);
+  } finally {
+    await f.close();
+  }
+});
+
 const password = "Mangumi-test-password-42!";
 async function uploadFile(
   f: Awaited<ReturnType<typeof fixture>>,

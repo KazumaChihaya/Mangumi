@@ -9,6 +9,7 @@ import { brandedEmail } from "./email.ts";
 import { scheduleStart } from "../../member/src/dates.ts";
 import { activateOdds } from "./gacha-versions.ts";
 import { consume } from "./limits.ts";
+import { contentAccess } from "./content-access.ts";
 
 export async function enqueue(
   q: Query,
@@ -361,6 +362,7 @@ export async function processJobs(db: Database, external: Services) {
               `/u/U035?item=${encodeURIComponent(story.id)}`,
               "story",
               story.plan,
+              { storyId: story.id },
             );
         });
       } else if (job.kind === "voice_kick_user") {
@@ -492,6 +494,18 @@ export async function processJobs(db: Database, external: Services) {
             scheduleStart(schedule) !== payload.startsAt
           )
             deliver = false;
+          if (deliver && schedule && user) {
+            try {
+              await entitled(db, user, "calendar.view");
+              if (
+                !(await contentAccess(db, user, "calendar.view", schedule))
+                  .allowed
+              )
+                deliver = false;
+            } catch {
+              deliver = false;
+            }
+          }
           if (schedule && payload.reminderMinutes !== undefined) {
             const custom = await get(
                 db,
@@ -513,6 +527,15 @@ export async function processJobs(db: Database, external: Services) {
                   ).map((r: string) => labels[r]));
             if (!timings.includes(payload.reminderMinutes)) deliver = false;
           }
+        }
+        if (deliver && payload.storyId && user) {
+          const story = await get(db, "stories", payload.storyId);
+          if (
+            !story ||
+            !contentVisible(story, user) ||
+            !(await contentAccess(db, user, "story.view", story)).allowed
+          )
+            deliver = false;
         }
         const delay =
           deliver && payload.urgent !== "1"

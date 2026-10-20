@@ -48,7 +48,7 @@ export function LivePwa({ admin = false }: { admin?: boolean }) {
       major <= g.maxVersion,
   );
   useEffect(() => {
-    if(nativeHost())return;
+    if (nativeHost() || /MangumiNative\//.test(navigator.userAgent)) return;
     const standalone =
       matchMedia("(display-mode: standalone)").matches ||
       (navigator as any).standalone;
@@ -109,7 +109,7 @@ export function LivePwa({ admin = false }: { admin?: boolean }) {
       localStorage.setItem("mangumi-install-guide", "seen");
     } catch {}
   };
-  if(nativeHost())return null;
+  if (nativeHost()) return null;
   return (
     <>
       {waiting && (

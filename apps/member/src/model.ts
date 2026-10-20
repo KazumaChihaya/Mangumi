@@ -69,6 +69,7 @@ export type DemoState = {
     notifyDM: boolean;
     notifyStory: boolean;
     notifySchedule: boolean;
+    reminders?: string[];
     quiet: boolean;
     quietFrom: string;
     quietTo: string;
