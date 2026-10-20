@@ -158,6 +158,15 @@ export default function App() {
         if (await SecureStore.getItemAsync("mangumi.refresh")) {
           try {
             await api.refresh();
+            const deliveryId =
+              notification?.notification.request.content.data?.deliveryId;
+            if (deliveryId)
+              void api
+                .request(
+                  `/api/notifications/${encodeURIComponent(String(deliveryId))}/click`,
+                  {},
+                )
+                .catch(() => {});
             if (!disposed) setSource(await api.webSource(initial));
           } catch (reason) {
             if (

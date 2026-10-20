@@ -1,6 +1,6 @@
 import { Platform, PermissionsAndroid } from "react-native";
 import { AudioSession } from "@livekit/react-native";
-import { Room, RoomEvent } from "livekit-client";
+import { Room, RoomEvent, Track } from "livekit-client";
 import notifee, {
   AndroidImportance,
   AndroidForegroundServiceType,
@@ -123,11 +123,34 @@ export class NativeVoice {
         muted: true,
         error: "",
       });
-      this.timer = setInterval(() => {
+      this.timer = setInterval(async () => {
+        let rtt: number | undefined, packetLoss: number | undefined;
+        const stats = await room.localParticipant
+          .getTrackPublication(Track.Source.Microphone)
+          ?.track?.getRTCStatsReport()
+          .catch(() => undefined);
+        stats?.forEach((stat) => {
+          if (
+            stat.type === "candidate-pair" &&
+            stat.state === "succeeded" &&
+            typeof stat.currentRoundTripTime === "number"
+          )
+            rtt = Math.min(
+              60000,
+              Math.max(0, stat.currentRoundTripTime * 1000),
+            );
+          if (
+            stat.type === "remote-inbound-rtp" &&
+            typeof stat.fractionLost === "number"
+          )
+            packetLoss = Math.min(1, Math.max(0, stat.fractionLost));
+        });
         void this.session
           .request(`/api/voice-rooms/${encodeURIComponent(id)}/quality`, {
             quality: room.localParticipant.connectionQuality,
             reconnects: this.reconnects,
+            ...(rtt !== undefined ? { rtt } : {}),
+            ...(packetLoss !== undefined ? { packetLoss } : {}),
           })
           .catch(() => {});
       }, 30000);
