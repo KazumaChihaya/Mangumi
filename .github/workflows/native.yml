@@ -51,7 +51,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mangumi/native exec expo prebuild --platform ios --no-install
-      - run: pod install --project-directory=apps/native/ios
+      - run: pod install
+        working-directory: apps/native/ios
       - name: Compile unsigned iOS Simulator application
         shell: bash
         run: |

@@ -10,6 +10,11 @@ export function NativeConnection() {
     [error, setError] = useState(""),
     [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    const ready = () => setAttempt((n) => n + 1);
+    window.addEventListener("mangumi-native-ready", ready);
+    return () => window.removeEventListener("mangumi-native-ready", ready);
+  }, []);
+  useEffect(() => {
     const host = nativeHost();
     if (!host || !state.profile.signedIn || !state.profile.verified) {
       linked.current = "";

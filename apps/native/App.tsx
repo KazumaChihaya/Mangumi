@@ -420,11 +420,13 @@ export default function App() {
         ) : (
           <WebView
             ref={web}
+            applicationNameForUserAgent="MangumiNative/1"
             source={source}
             style={styles.web}
             originWhitelist={[origin]}
             onMessage={onMessage}
             injectedJavaScriptBeforeContentLoaded={`window.MangumiNative=${JSON.stringify({ version: 1, platform: Platform.OS, nonce })};true;`}
+            injectedJavaScript={`window.MangumiNative=${JSON.stringify({ version: 1, platform: Platform.OS, nonce })};window.dispatchEvent(new Event('mangumi-native-ready'));true;`}
             javaScriptCanOpenWindowsAutomatically={false}
             setSupportMultipleWindows={false}
             thirdPartyCookiesEnabled={false}
