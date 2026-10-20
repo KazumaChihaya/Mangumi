@@ -1327,7 +1327,7 @@ test("new-device logins and password changes queue durable security notices and 
   }
 });
 
-test("operational alerts enforce role, thresholds, cooldown, recovery and durable mail delivery", async () => {
+test("operational alerts enforce role, thresholds, cooldown, recovery and durable mail delivery", async (t) => {
   const f = await fixture();
   try {
     const admin = await f.login(await f.user("super"), "admin", true),
@@ -1373,6 +1373,7 @@ test("operational alerts enforce role, thresholds, cooldown, recovery and durabl
       payload: { policy, reason: "運用アラートを有効にする" },
     });
     assert.equal(saved.statusCode, 200, saved.body);
+    t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
     const advance = async () => {
       const state = await get(f.db, "monitoring", "state");
       await put(f.db, "monitoring", "state", {

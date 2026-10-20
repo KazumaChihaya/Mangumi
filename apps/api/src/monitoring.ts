@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { get, list, put, remove, type Database } from "./db.ts";
 import { identity, permit } from "./auth.ts";
-import { audit, digest, fail, now } from "./security.ts";
+import { audit, digest, fail, now, id } from "./security.ts";
 import { enqueue } from "./jobs.ts";
 import type { Config } from "./config.ts";
 import type { Services } from "./services.ts";
@@ -81,14 +81,15 @@ export async function checkOperationalAlerts(
         text = active
           ? reasons.slice(0, 30).join("\n")
           : "監視対象の値が設定した閾値内に戻りました。";
+      const eventId = id();
       for (const to of [...new Set<string>(policy.recipients)])
-        await enqueue(q, digest(`monitor:${stamp}:${to}`), "mail", {
+        await enqueue(q, digest(`monitor:${eventId}:${to}`), "mail", {
           to,
           subject: title,
           text,
         });
-      await put(q, "monitoringAlerts", stamp, {
-        id: stamp,
+      await put(q, "monitoringAlerts", eventId, {
+        id: eventId,
         at: stamp,
         active,
         reasons,
