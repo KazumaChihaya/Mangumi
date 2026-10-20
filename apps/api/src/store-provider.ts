@@ -20,6 +20,7 @@ export type StoreTransaction = {
   purchasedAt: string;
   expiresAt?: string;
   revoked: boolean;
+  refunded?: boolean;
   quantity: number;
   amount?: number;
   currency?: string;
@@ -79,6 +80,7 @@ export function storeServices(config: Config) {
         ? { expiresAt: new Date(data.expiresDate).toISOString() }
         : {}),
       revoked: !!data.revocationDate,
+      refunded: !!data.revocationDate,
       quantity: 1,
       ...(data.price !== undefined
         ? {
@@ -171,6 +173,7 @@ export function storeServices(config: Config) {
         accountId: data.obfuscatedExternalAccountId,
         purchasedAt: new Date(data.purchaseCompletionTime).toISOString(),
         revoked: data.purchaseStateContext?.purchaseState !== "PURCHASED",
+        refunded: data.purchaseStateContext?.purchaseState === "CANCELLED",
         quantity: 1,
       };
     },

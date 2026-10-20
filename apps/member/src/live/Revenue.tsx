@@ -29,10 +29,42 @@ export function LiveRevenue() {
       {report.error && <Notice tone="error">{report.error}</Notice>}
       <Notice>{report.data?.definitions}</Notice>
       <h3>ストア購入</h3>
-      <Notice>ストアが返す最小通貨単位で表示します。catalogは運営の設定価格で、実際の入金額の確定値ではありません。手数料・税・入金はストアの精算書と照合してください。コイン使用を売上へ再加算しません。</Notice>
-      <Table columns={["購入ID","ストア","商品","種類","額（最小通貨単位）","通貨","価格の根拠","返金"]} rows={(report.data?.storePurchases ?? []).map((p:any)=>[p.id,p.platform,p.productId,p.kind,p.amount,p.currency,p.amountSource,p.revoked ? "返金・取消" : "有効"])} />
+      <Notice>
+        ストアが返す最小通貨単位で表示します。catalogは運営の設定価格で、実際の入金額の確定値ではありません。手数料・税・入金はストアの精算書と照合してください。コイン使用を売上へ再加算しません。
+      </Notice>
+      <Table
+        columns={[
+          "購入ID",
+          "ストア",
+          "商品",
+          "種類",
+          "額（最小通貨単位）",
+          "通貨",
+          "価格の根拠",
+          "返金",
+        ]}
+        rows={(report.data?.storePurchases ?? []).map((p: any) => [
+          p.id,
+          p.platform,
+          p.productId,
+          p.kind,
+          p.amount,
+          p.currency,
+          p.amountSource,
+          p.refunded ? "返金" : p.revoked ? "無効・停止" : "有効",
+        ])}
+      />
       <h3>コインによる応援</h3>
-      <Table columns={["日時","応援ID","受取人","使用コイン","状態"]} rows={(report.data?.coinTips ?? []).map((p:any)=>[p.at,p.id,p.recipient,p.coins,p.status])}/>
+      <Table
+        columns={["日時", "応援ID", "受取人", "使用コイン", "状態"]}
+        rows={(report.data?.coinTips ?? []).map((p: any) => [
+          p.at,
+          p.id,
+          p.recipient,
+          p.coins,
+          p.status,
+        ])}
+      />
       {total && (
         <div className="metric-grid">
           <Metric label="決済額" value={yen(total.gross)} />

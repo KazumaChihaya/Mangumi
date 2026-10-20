@@ -24,8 +24,10 @@ export function registerReports(
       (!query.from || row.at >= query.from) && (!query.to || row.at < query.to);
     const rows = [
       ...(await list(db, "tips"))
-        .filter((t) =>
-          ["paid", "refunded", "disputed"].includes(t.paymentStatus) && (!t.provider || t.provider === "stripe"),
+        .filter(
+          (t) =>
+            ["paid", "refunded", "disputed"].includes(t.paymentStatus) &&
+            (!t.provider || t.provider === "stripe"),
         )
         .map((t) => ({
           id: t.id,
@@ -77,8 +79,37 @@ export function registerReports(
         }),
       ),
       rows,
-      storePurchases:(await list(db,"storeReceipts")).filter(inPeriod).map(r=>({id:r.id,platform:r.platform,productId:r.productId,kind:r.kind,amount:r.amount,currency:r.currency,amountSource:r.amountSource,revoked:r.revoked,at:r.at,fee:null})),
-      coinTips:(await list(db,"tips")).filter(t=>t.provider && t.provider!=="stripe" && t.paymentStatus==="paid" && inPeriod(t) && (!query.recipient || t.recipient===query.recipient)).map(t=>({id:t.id,at:t.at,recipient:t.recipient,coins:t.amount,status:t.status})),
+      storePurchases: (await list(db, "storeReceipts"))
+        .filter(inPeriod)
+        .map((r) => ({
+          id: r.id,
+          platform: r.platform,
+          productId: r.productId,
+          kind: r.kind,
+          amount: r.amount,
+          currency: r.currency,
+          amountSource: r.amountSource,
+          revoked: r.revoked,
+          refunded: r.refunded,
+          at: r.at,
+          fee: null,
+        })),
+      coinTips: (await list(db, "tips"))
+        .filter(
+          (t) =>
+            t.provider &&
+            t.provider !== "stripe" &&
+            t.paymentStatus === "paid" &&
+            inPeriod(t) &&
+            (!query.recipient || t.recipient === query.recipient),
+        )
+        .map((t) => ({
+          id: t.id,
+          at: t.at,
+          recipient: t.recipient,
+          coins: t.amount,
+          status: t.status,
+        })),
     };
   });
   app.get("/api/admin/story-analytics", async (request) => {

@@ -816,6 +816,7 @@ svg {
   outline-offset: 4px;
 }
 .switch-track {
+  pointer-events: none;
   height: 23px;
   width: 40px;
   background: #46354b;

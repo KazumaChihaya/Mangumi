@@ -80,7 +80,7 @@ Stripeの対象イベントは `payment_intent.succeeded`、`payment_intent.paym
 
 ## 実装範囲と接続時の確認
 
-初回提供のWeb／PWA（Phase 1〜5）の利用者画面と管理画面を実装している。Phase 6は仕様書どおり将来のストア展開であり、ネイティブ版の完成・審査済みを意味しない。
+Web／PWA（Phase 1〜5）の利用者画面と管理画面、および Phase 6 の iOS／Android ホスト・通知・音声・ストア課金アダプターを実装している。[仕様・試験対応表](acceptance-matrix.md)で検証範囲、[ネイティブ配置](native-deployment.md)でストア接続を確認する。実機受入・本番接続・ストア審査は未完了。
 
 | 分野 | 実装した処理 |
 | --- | --- |

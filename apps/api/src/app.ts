@@ -124,6 +124,10 @@ export async function createApp(
   });
   await app.register(rateLimit, {
     max: options.rateLimit === false && !config.production ? 100000 : 120,
+    allowList:
+      options.rateLimit === false && !config.production
+        ? () => true
+        : undefined,
     timeWindow: "1 minute",
   });
   await app.register(multipart, {

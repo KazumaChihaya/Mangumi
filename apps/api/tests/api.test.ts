@@ -170,6 +170,7 @@ test("Google refund notifications resolve an unseen product and an old renewal r
     const expiresAt = new Date(Date.now() + 86400000).toISOString(),
       proof = "synthetic-google-token-test-only";
     f.config.googlePackage = "test.mangumi.app";
+    let inactive = false;
     (f.external as any).googleNotification = async () => {};
     (f.external as any).verifyStore = async (input: any) => ({
       platform: "android",
@@ -179,7 +180,7 @@ test("Google refund notifications resolve an unseen product and an old renewal r
       accountId: digest(fan.id),
       purchasedAt: now(),
       expiresAt,
-      revoked: false,
+      revoked: inactive,
       quantity: 1,
     });
     const event = {
@@ -210,6 +211,72 @@ test("Google refund notifications resolve an unseen product and an old renewal r
       "active",
     );
     assert.equal((await list(f.db, "storeReceipts", fan.id))[0].revoked, false);
+    const native = await nativeLogin(f, fan, "android"),
+      payload = { platform: "android", productId: sku, proof };
+    inactive = true;
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/native/store/verify",
+          headers: native.headers,
+          payload,
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (await get(f.db, "storeSubscription", fan.id)).status,
+      "expired",
+    );
+    inactive = false;
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/native/store/verify",
+          headers: native.headers,
+          payload,
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (await get(f.db, "storeSubscription", fan.id)).status,
+      "active",
+      "a recovered Play subscription can resume the same verified period",
+    );
+    event.voidedPurchaseNotification.orderId = "latest-order-2";
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: "/api/webhooks/google-play",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer synthetic-test-identity",
+          },
+          payload: JSON.stringify({
+            message: {
+              messageId: "current-period-refunded",
+              data: Buffer.from(JSON.stringify(event)).toString("base64"),
+            },
+          }),
+        })
+      ).statusCode,
+      200,
+    );
+    await f.app.inject({
+      method: "POST",
+      url: "/api/native/store/verify",
+      headers: native.headers,
+      payload,
+    });
+    assert.equal(
+      (await get(f.db, "storeSubscription", fan.id)).status,
+      "expired",
+      "a refunded period stays revoked even if older client state is retried",
+    );
   } finally {
     await f.close();
   }
@@ -752,6 +819,11 @@ test("verified native purchases fund coins once, tips consume atomically and ref
     });
     assert.equal(refund.statusCode, 200, refund.body);
     assert.equal((await get(f.db, "nativeWallet", fan.id)).balance, -200);
+    assert.equal(
+      (await list(f.db, "tips", fan.id)).find((t) => t.storeReceiptId)
+        ?.paymentStatus,
+      "refunded",
+    );
     revoked = false;
     await f.app.inject({
       method: "POST",
@@ -794,6 +866,11 @@ test("verified native purchases fund coins once, tips consume atomically and ref
       (await get(f.db, "nativeWallet", fan.id)).balance,
       300,
       "only an authenticated refund reversal restores the original credits, once",
+    );
+    assert.equal(
+      (await list(f.db, "tips", fan.id)).find((t) => t.storeReceiptId)
+        ?.paymentStatus,
+      "paid",
     );
   } finally {
     await f.close();

@@ -297,6 +297,27 @@ test("administrator logs in with real MFA and publishes a schedule visible to an
   await expect(
     fan.getByText("本番接続の配信予定", { exact: true }),
   ).toBeVisible();
+  const published = (
+    (await (await fan.request.get("/api/state")).json()).state
+      .schedules as any[]
+  ).find((s) => s.title === "本番接続の配信予定");
+  await fan.goto(`/u/U032?item=${published.id}`);
+  await fan.getByRole("switch", { name: "24時間前", exact: true }).check();
+  await fan.getByRole("button", { name: "設定を保存", exact: true }).click();
+  await expect(
+    fan.getByText("リマインダーを保存しました", { exact: true }),
+  ).toBeVisible();
+  await fan.reload();
+  await expect(
+    fan.getByRole("switch", { name: "24時間前", exact: true }),
+  ).toBeChecked();
+  expect(
+    (
+      await (
+        await fan.request.get(`/api/schedules/${published.id}/reminders`)
+      ).json()
+    ).minutes,
+  ).toContain(1440);
   await context.close();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -305,6 +326,80 @@ test("administrator logs in with real MFA and publishes a schedule visible to an
     await expect(page.getByTestId(screen.id)).toBeVisible();
     expect(errors, screen.id).toEqual([]);
   }
+});
+
+test("native bridge contract routes purchases and restoration through the host without a Web checkout", async ({
+  page,
+}) => {
+  const calls: any[] = [];
+  let webCheckouts = 0;
+  page.on("request", (request) => {
+    if (
+      request.url().endsWith("/api/billing/checkout") &&
+      request.method() === "POST"
+    )
+      webCheckouts++;
+  });
+  await page.exposeFunction("recordNativeContract", (message: any) => {
+    calls.push(message);
+  });
+  await page.addInitScript(() => {
+    window.MangumiNative = {
+      version: 1,
+      platform: "android",
+      nonce: "synthetic-browser-bridge-installation",
+    };
+    window.ReactNativeWebView = {
+      postMessage(raw: string) {
+        const message = JSON.parse(raw);
+        void (window as any).recordNativeContract(message);
+        setTimeout(
+          () =>
+            window.dispatchEvent(
+              new CustomEvent("mangumi-native-result", {
+                detail: {
+                  id: message.id,
+                  ...(message.method === "billing.checkout"
+                    ? { error: "ストア呼び出しの契約試験" }
+                    : { result: { linked: true, count: 1 } }),
+                },
+              }),
+            ),
+          0,
+        );
+      },
+    };
+  });
+  await page.route("**/api/config", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      json: { ...(await response.json()), billingEnabled: true },
+    });
+  });
+  await login(page, "fan@example.test");
+  await expect
+    .poll(() => calls.some((c) => c.method === "session.link"))
+    .toBe(true);
+  await page.goto("/u/U065");
+  await page.getByLabel("使用する応援コイン", { exact: true }).fill("500");
+  await page
+    .getByLabel("応援メッセージ", { exact: true })
+    .fill("端末ブリッジを確認");
+  await page
+    .getByRole("button", { name: "お支払いへ進む", exact: true })
+    .click();
+  await expect(
+    page.getByText("ストア呼び出しの契約試験", { exact: true }),
+  ).toBeVisible();
+  expect(
+    calls.find((c) => c.method === "billing.checkout")?.params,
+  ).toMatchObject({ kind: "tip", amount: 500, visibility: "private" });
+  expect(webCheckouts).toBe(0);
+  await page.getByRole("button", { name: "復元する", exact: true }).click();
+  await expect(
+    page.getByText("購入情報を確認しました", { exact: true }),
+  ).toBeVisible();
+  expect(calls.some((c) => c.method === "billing.restore")).toBe(true);
 });
 
 test("administrator saves detailed plan limits, notification templates and retention policy on mobile", async ({

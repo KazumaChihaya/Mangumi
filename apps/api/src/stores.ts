@@ -81,7 +81,15 @@ async function apply(
   )
     fail(403, "他の会員に紐付いた購入です");
   await put(q, "storeOwners", ownerKey, { userId: user.id }, user.id);
-  const revoked = reversed ? false : t.revoked || previous?.revoked === true;
+  const revoked = reversed
+    ? false
+    : t.revoked ||
+      previous?.refunded === true ||
+      ((product.kind === "coins" || t.platform === "ios") &&
+        previous?.revoked === true);
+  const refunded = reversed
+    ? false
+    : !!t.refunded || previous?.refunded === true;
   let wallet = (await get(q, "nativeWallet", user.id)) ?? { balance: 0 };
   const credits = previous?.credits ?? product.credits ?? 0;
   if (product.kind === "coins") {
@@ -117,6 +125,7 @@ async function apply(
     idInStore: t.id,
     id: receiptId,
     revoked,
+    refunded,
     credits,
     credited: previous?.credited || (product.kind === "coins" && !revoked),
     amount: t.amount ?? previous?.amount ?? product.amount,
@@ -129,6 +138,23 @@ async function apply(
     updatedAt: now(),
   };
   await put(q, "storeReceipts", receiptId, receipt, user.id);
+  for (const item of await list(q, "tips", user.id))
+    if (
+      item.storeReceiptId === receiptId &&
+      ["paid", "refunded"].includes(item.paymentStatus)
+    )
+      await put(
+        q,
+        "tips",
+        item.id,
+        {
+          ...item,
+          paymentStatus: revoked ? "refunded" : "paid",
+          status: revoked ? "ストア返金" : "応援完了",
+          refunded: revoked ? item.amount : 0,
+        },
+        user.id,
+      );
   if (product.kind === "subscription") {
     if (!t.expiresAt || !Number.isFinite(Date.parse(t.expiresAt)))
       fail(403, "契約期限を確認できません");
@@ -627,8 +653,10 @@ export function registerStores(
     if (
       message.voidedPurchaseNotification &&
       (product.kind !== "subscription" || change.orderId === transaction.id)
-    )
+    ) {
       transaction.revoked = true;
+      transaction.refunded = true;
+    }
     return db.transaction(async (q) => {
       if (
         (
@@ -661,6 +689,7 @@ export function registerStores(
             ...prior,
             id: prior.idInStore,
             revoked: true,
+            refunded: true,
           });
       }
       await apply(q, user, product, transaction);

@@ -11,7 +11,7 @@ UI案は画面構成の根拠、別途提供された「雰囲気イメージ」
 
 API接続版では、会員登録・メール確認、Cookie認証、必須の管理者二要素認証、プラン権限、予定、通知ジョブ、ストーリー、DMと録音、LiveKit音声ルーム、Stripe決済連携、抽選・景品・監査履歴をサーバーで処理します。SQLite／MariaDBへ保存し、別アカウント・別ブラウザから確認できます。登録直後にダミーの会員・売上・投稿を表示しません。
 
-**本番公開は未完了です。** 本番VPS・ドメイン・SMTP・VAPID・Stripe・LiveKitの設定と実環境での受入が必要です。GitHub PagesはサンプルデータのUIプレビューを提供し、会員情報や決済を扱うAPI接続版はVPSへ配置します。プラン上限・通知対象・保存期間・期間別売上・予約確率版・復旧処理を実装済みです。将来のネイティブ版はPhase 6で提供します。[実装範囲と本番配置](docs/server-setup.md)を参照してください。
+**本番公開は未完了です。** 本番VPS・ドメイン・外部サービスの設定と実環境での受入が必要です。PagesはサンプルのUIプレビューです。iOS／Androidアプリ、セキュアストレージ、バックグラウンド音声、録音、Expo Push、ストア課金・復元・更新・返金の実装は `apps/native` にあります。実端末の受入と署名済み配布・審査は別途必要です。[仕様と検証の対応表](docs/acceptance-matrix.md)、[ネイティブの配置](docs/native-deployment.md)、[サーバー配置](docs/server-setup.md)を参照してください。
 
 - プロダクト名：まんぞうラブ
 - リポジトリ名：Mangumi
@@ -84,7 +84,7 @@ Windowsでは、サーバー停止時に `StartPreview.cmd` をダブルクリ�
 
 サンプルデータは `sessionStorage`、音と演出の好みは `localStorage` に保存します。パスワード、カード番号、CVCは保存しません。録音音声は端末のメモリ内でプレビューします。
 
-現在の描画はWebのDOM／CSSです。共有TypeScriptモデルと操作ロジックへ、将来のiOS・Android版の描画、通知、ストア課金アダプターを追加する計画です。
+画面はDOM／CSSです。iOS／Android版は同じ画面をHTTPSのWebViewで共有し、認証情報の保存、通知、音声、録音、ストア課金をReact NativeのSDKで処理します。[ネイティブの配置](docs/native-deployment.md)を参照してください。
 
 ## 検証
 
